@@ -3,6 +3,7 @@ import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { AdminDashboard } from "./admin-dashboard";
 import { CheckoutSince, checkoutRowClass } from "@/components/checkout-since";
+import { orderLabel } from "@/lib/orders";
 
 async function FormulatorDashboard({ userId }: { userId: string }) {
   const [myRequests, myOrders, feedbackDue, myPieces] = await Promise.all([
@@ -100,7 +101,7 @@ async function FormulatorDashboard({ userId }: { userId: string }) {
           <Empty />
         ) : (
           <Table
-            rows={myOrders.map((o) => [o.newRmName ?? "(existing RM)", o.supplier, o.status])}
+            rows={myOrders.map((o) => [orderLabel(o), o.supplierName ?? o.supplier1 ?? "—", o.status])}
             headers={["RM", "Supplier", "Status"]}
           />
         )}

@@ -119,11 +119,11 @@ async function main() {
     },
   });
   await prisma.sampleOrder.create({
-    data: { newRmName: PREFIX + "NEWRM", supplier: "Acme", orderedById: admin.id, status: "PENDING" },
+    data: { requestType: "NEW", inciName: PREFIX + "NEWRM", supplier1: "Acme", orderedById: admin.id, status: "PENDING", directorApprovalConfirmed: true },
   });
   await prisma.sampleOrder.create({
     data: {
-      newRmName: PREFIX + "INPROGRESS", supplier: "Acme", orderedById: admin.id, status: "APPROVED",
+      requestType: "NEW", inciName: PREFIX + "INPROGRESS", supplier1: "Acme", orderedById: admin.id, status: "APPROVED", directorApprovalConfirmed: true,
       approvedById: admin.id, decidedAt: new Date(), prNumber: "PR-9001",
     },
   });
@@ -227,7 +227,7 @@ async function main() {
     await prisma.sampleRequest.deleteMany({
       where: { id: { in: [pendingReq.id, approvedNoFeedback.id, approvedWithFeedback.id] } },
     });
-    await prisma.sampleOrder.deleteMany({ where: { newRmName: { startsWith: PREFIX } } });
+    await prisma.sampleOrder.deleteMany({ where: { inciName: { startsWith: PREFIX } } });
     await prisma.samplePiece.deleteMany({ where: { sample: { sampleCode: { startsWith: PREFIX } } } });
     await prisma.sample.deleteMany({ where: { sampleCode: { startsWith: PREFIX } } });
     await prisma.user.deleteMany({ where: { adUsername: { startsWith: PREFIX.toLowerCase() } } });

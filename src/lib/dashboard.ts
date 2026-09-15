@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { loadSampleStock } from "@/lib/stock-queries";
 import { loadCategoryColors } from "@/lib/shelf";
 import { stockLevel, EMPTY_STOCK, type StockLevel, type SampleStock } from "@/lib/stock";
+import { orderLabel } from "@/lib/orders";
 
 // Everything the Admin dashboard shows, assembled in one place so the page stays a
 // rendering concern and the numbers can be verified without a browser (SLT-59).
@@ -196,7 +197,7 @@ export async function loadActivity(): Promise<ActivityEntry[]> {
     }),
     prisma.sampleOrder.findMany({
       include: {
-        existingSample: { select: { id: true, sampleCode: true } },
+        existingSample: { select: { id: true, sampleCode: true, rmName: true } },
         orderedBy: { select: { name: true } },
         approvedBy: { select: { name: true } },
       },
@@ -249,13 +250,18 @@ export async function loadActivity(): Promise<ActivityEntry[]> {
   }
 
   for (const o of orders) {
-    const what = o.existingSample?.sampleCode ?? o.newRmName ?? "new raw material";
+    const what = orderLabel(o);
+    // A new-material request carries up to three supplier options rather than one name.
+    const from =
+      [o.supplier1, o.supplier2, o.supplier3].filter((x) => (x ?? "").trim() !== "").join(", ") ||
+      o.supplierName ||
+      "an unnamed supplier";
     const href = o.existingSample ? `/library/${o.existingSample.id}` : null;
 
     entries.push({
       id: `ord-${o.id}`,
       kind: "ORDER",
-      description: `${o.orderedBy.name} ordered ${what} from ${o.supplier}`,
+      description: `${o.orderedBy.name} ordered ${what} from ${from}`,
       at: o.createdAt,
       href,
     });
@@ -276,7 +282,7 @@ export async function loadActivity(): Promise<ActivityEntry[]> {
       entries.push({
         id: `ord-${o.id}-pr`,
         kind: "PR",
-        description: `PR ${o.prNumber} raised for ${what} (${o.supplier})`,
+        description: `PR ${o.prNumber} raised for ${what} (${from})`,
         at: o.decidedAt ?? o.createdAt,
         href,
       });
@@ -285,7 +291,7 @@ export async function loadActivity(): Promise<ActivityEntry[]> {
       entries.push({
         id: `ord-${o.id}-received`,
         kind: "ORDER",
-        description: `Order received: ${what} from ${o.supplier}`,
+        description: `Order received: ${what} from ${from}`,
         at: o.receivedAt,
         href,
       });

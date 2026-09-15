@@ -9,6 +9,7 @@ import {
 } from "@/lib/categories";
 import { BIODEGRADABILITY, TRISTATE, YES_NO } from "@/lib/ingredients";
 import { PIECE_MODES, pieceSumMessage, sumCents, toCents } from "@/lib/pieces";
+import { ORDER_REQUEST_TYPES, needsExistingSample } from "@/lib/orders";
 
 // SLT-13. Function, Physical Form and Supplier are chosen from the admin-managed
 // reference lists (see /settings/lists); the action additionally checks each submitted
@@ -254,3 +255,56 @@ export const DiscardPiecesSchema = z.object({
   pieceIds: z.array(z.string().min(1)).min(1, "Select at least one piece to discard"),
   reason: z.string().trim().min(1, "Enter a reason for discarding these pieces"),
 });
+
+// Sample order request (SLT-58). Almost every field is optional by design: procurement
+// would rather have a partial request than none, and the only hard gate is the Director
+// attestation. The supplier short-list rule is checked in the action, where the request
+// type and the three boxes can be looked at together.
+// Capped because these are free-text boxes on a request form, not prose fields.
+const orderText = z
+  .string()
+  .trim()
+  .max(500)
+  .transform((v) => (v === "" ? null : v))
+  .nullable()
+  .optional();
+
+export const CreateSampleOrderSchema = z
+  .object({
+    requestType: z.enum(ORDER_REQUEST_TYPES, { error: "Choose a request type" }),
+    existingSampleId: orderText,
+
+    inciName: orderText,
+    physicalForm: orderText,
+    category: orderText,
+    source: orderText,
+    function: orderText,
+    projectName: orderText,
+
+    mainCharacteristic: orderText,
+    application: orderText,
+    productFormat: orderText,
+    dosageOfUse: orderText,
+    requiredQuantityG: orderText,
+    referenceLink: orderText,
+    requiredDocuments: orderText,
+
+    supplierName: orderText,
+    supplier1: orderText,
+    supplier2: orderText,
+    supplier3: orderText,
+
+    // The form posts these only once the requester has actually confirmed.
+    directorApprovalConfirmed: z.coerce.boolean(),
+    shortSupplierListAcknowledged: z.coerce.boolean().optional(),
+  })
+  // AC4: nothing saves without the attestation, whatever the type.
+  .refine((v) => v.directorApprovalConfirmed, {
+    path: ["directorApprovalConfirmed"],
+    error: "Confirm the Director has approved this request before submitting.",
+  })
+  // The two existing-sample types are meaningless without the sample they refer to.
+  .refine((v) => !needsExistingSample(v.requestType) || Boolean(v.existingSampleId), {
+    path: ["existingSampleId"],
+    error: "Choose the sample this request is for.",
+  });

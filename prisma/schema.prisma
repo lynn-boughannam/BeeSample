@@ -420,24 +420,69 @@ model SampleRequest {
   @@map("sample_requests")
 }
 
+// A request for procurement to source a sample (SLT-58, replacing SLT-33/34). This is
+// submission only — the Admin-side receiving step is a separate story, which is why the
+// status/PR/received columns are here but nothing in the app writes them yet.
 model SampleOrder {
-  id                String       @id @default(cuid())
-  existingSampleId  String?
-  existingSample    Sample?      @relation(fields: [existingSampleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  newRmName         String?
-  newRmDetails      String?
+  id String @id @default(cuid())
 
-  supplier     String
-  orderedById  String
-  orderedBy    User        @relation("OrderedBy", fields: [orderedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  status       String      @default("PENDING")
+  // NEW | EXISTING_NEW_SOURCE | EXISTING_SAME_SOURCE — see ORDER_REQUEST_TYPES in
+  // src/lib/orders.ts. Decides which fields are pre-filled and how suppliers are asked for.
+  requestType String
+
+  // The live Sample Library is the catalogue for the two "existing sample" types; there is
+  // no separate RM catalog to keep in step.
+  existingSampleId String?
+  existingSample   Sample? @relation(fields: [existingSampleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // Pre-filled from the chosen sample on types 2 and 3, then editable. Stored as plain
+  // values rather than read back through existingSample, so the record keeps what was
+  // actually requested even if the sample is later edited.
+  inciName     String?
+  physicalForm String?
+  category     String?
+  source       String?
+  function     String?
+  projectName  String?
+
+  // Always entered fresh: these describe this request, not the raw material.
+  mainCharacteristic String?
+  application        String?
+  productFormat      String?
+  dosageOfUse        String?
+  requiredQuantityG  String?
+  referenceLink      String?
+  requiredDocuments  String?
+
+  // Types 2 and 3 name a single supplier. A brand-new RM is asked for three options
+  // instead, none of them individually required — see the acknowledgement below.
+  supplierName String?
+  supplier1    String?
+  supplier2    String?
+  supplier3    String?
+
+  // Both confirmations are recorded, not merely enforced. The attestation is a claim that
+  // the Director signed off, and the acknowledgement marks an incomplete supplier list as
+  // a deliberate choice rather than an oversight — neither is worth anything if it only
+  // ever existed as a dialog the requester clicked past.
+  directorApprovalConfirmed   Boolean @default(false)
+  shortSupplierListAcknowledged Boolean @default(false)
+
+  // Submission date and responsible user, both set by the server (AC7).
+  orderedById String
+  orderedBy   User     @relation("OrderedBy", fields: [orderedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt   DateTime @default(now())
+
+  // For the receiving/review step still to be specified.
+  status       String    @default("PENDING")
   prNumber     String?
   approvedById String?
-  approvedBy   User?       @relation("OrderApprovedBy", fields: [approvedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  approvedBy   User?     @relation("OrderApprovedBy", fields: [approvedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   decidedAt    DateTime?
   receivedAt   DateTime?
-  createdAt    DateTime    @default(now())
 
+  @@index([orderedById, createdAt])
+  @@index([status])
   @@map("sample_orders")
 }
 
