@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { shelfAddress, shelfCellKey } from "@/lib/categories";
 import type { ShelfCellColors } from "@/lib/shelf";
-import { EMPTY_STOCK, type SampleStock } from "@/lib/stock";
+import { EMPTY_STOCK, stockLevel, type SampleStock } from "@/lib/stock";
 import { Badge, SwatchChip } from "@/components/ui/badge";
 
 export type LibrarySample = Prisma.SampleGetPayload<{
@@ -107,6 +107,23 @@ export const COLUMNS: ColumnDef[] = [
     sortValue: (s, ctx) => Number(stockOf(s, ctx).remainingQtyG),
     numeric: true,
   },
+  // SLT-26. Two mutually exclusive flags, and a healthy sample shows nothing at all — a
+  // column of "OK" badges would be noise that hides the rows that matter. Discarded wins
+  // over Zero Stock so a discarded sample isn't flagged twice for the same fact.
+  {
+    key: "flags",
+    label: "Flags",
+    render: (s, ctx) => {
+      if (s.isDiscarded) return <Badge variant="neutral">DISCARDED</Badge>;
+      if (stockLevel(stockOf(s, ctx)) === "ZERO") return <Badge variant="danger">ZERO</Badge>;
+      return <span className="text-neutral-dark/30">—</span>;
+    },
+    // Flagged rows sort to the top, which is the only ordering anyone wants here.
+    sortValue: (s, ctx) => {
+      if (s.isDiscarded) return 1;
+      return stockLevel(stockOf(s, ctx)) === "ZERO" ? 0 : 2;
+    },
+  },
   {
     key: "remainingPcs",
     label: "Remaining (pcs)",
@@ -206,6 +223,7 @@ export const DEFAULT_COLUMN_KEYS = [
   "category",
   "shelf",
   "remaining",
+  "flags",
   "supplier",
   "expiry",
 ];

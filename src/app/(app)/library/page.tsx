@@ -14,12 +14,17 @@ import {
 import { COLUMNS, DEFAULT_COLUMN_KEYS, resolveColumns } from "./columns";
 import { loadShelfCellColors } from "@/lib/shelf";
 import { loadSampleStock } from "@/lib/stock-queries";
+import { stockLevel, EMPTY_STOCK } from "@/lib/stock";
+import { Badge } from "@/components/ui/badge";
 import { ColumnPicker } from "@/components/column-picker";
 import { SortableHeader } from "@/components/ui/sortable-header";
 
 type SearchParams = {
   q?: string;
   discarded?: string;
+  // SLT-26: "ZERO" narrows to samples with nothing left, which is where the dashboard's
+  // Zero Stock KPI lands.
+  stock?: string;
   sort?: string;
   dir?: string;
   cols?: string;
@@ -34,6 +39,7 @@ export default async function LibraryPage({
 }) {
   const params = await searchParams;
   const showDiscarded = params.discarded === "1";
+  const zeroOnly = params.stock === "ZERO";
   const query = (params.q ?? "").trim();
   const session = await verifySession();
 
@@ -94,7 +100,7 @@ export default async function LibraryPage({
       : {}),
   };
 
-  const [samples, discardedCount, shelfColors] = await Promise.all([
+  const [rows, discardedCount, shelfColors] = await Promise.all([
     prisma.sample.findMany({
       where,
       orderBy,
@@ -107,8 +113,14 @@ export default async function LibraryPage({
   ]);
 
   // Current stock per sample, computed from pieces in one grouped query (SLT-29).
-  const stock = await loadSampleStock(samples.map((s) => s.id));
+  const stock = await loadSampleStock(rows.map((s) => s.id));
   const renderContext = { shelfColors, stock };
+
+  // Stock is computed from pieces, so it can't be a WHERE clause — the filter runs here,
+  // over the whole result set (the table isn't paginated).
+  const samples = zeroOnly
+    ? rows.filter((s) => stockLevel(stock[s.id] ?? EMPTY_STOCK) === "ZERO")
+    : rows;
 
   // Columns whose value is computed can't be ordered by SQL, so they're sorted here. The
   // whole result set is already in memory — the table isn't paginated — so this sorts
@@ -134,6 +146,7 @@ export default async function LibraryPage({
   const carried: Record<string, string | undefined> = {
     q: query || undefined,
     discarded: showDiscarded ? "1" : undefined,
+    stock: zeroOnly ? "ZERO" : undefined,
     cols: params.cols,
   };
 
@@ -142,6 +155,7 @@ export default async function LibraryPage({
   const resetParams = new URLSearchParams();
   if (query) resetParams.set("q", query);
   if (showDiscarded) resetParams.set("discarded", "1");
+  if (zeroOnly) resetParams.set("stock", "ZERO");
   const resetHref = resetParams.toString() ? `/library?${resetParams}` : "/library";
 
   function sortHref(key: string) {
@@ -164,6 +178,19 @@ export default async function LibraryPage({
           >
             {showDiscarded ? "← Back to active samples" : `View discarded (${discardedCount})`}
           </Link>
+          {/* Arriving from the dashboard KPI lands on a filtered list; say so, and give a
+              way back. Without this the Library just looks mysteriously short. */}
+          {zeroOnly && (
+            <span className="text-caption flex items-center gap-2">
+              <Badge variant="danger">ZERO STOCK ONLY</Badge>
+              <Link
+                href={showDiscarded ? "/library?discarded=1" : "/library"}
+                className="text-neutral-dark/60 hover:underline"
+              >
+                Clear filter
+              </Link>
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -190,6 +217,7 @@ export default async function LibraryPage({
             params={{
               q: query || undefined,
               discarded: showDiscarded ? "1" : undefined,
+              stock: zeroOnly ? "ZERO" : undefined,
               sort: params.sort,
               dir: params.dir,
             }}
