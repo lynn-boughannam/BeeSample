@@ -23,6 +23,7 @@ import {
   SHELF_LETTERS,
   SHELF_LEVELS,
   SHELF_SUBLEVELS,
+  nextShelfAddress,
   assignSublevel,
   colorKeyFor,
   shelfAddress,
@@ -222,11 +223,13 @@ export function SampleForm({
     nextOrientation: string
   ) {
     const next = shelfDefaults[shelfKey(nextSource, nextCategory, nextOrientation)];
-    setShelfLetter(next?.letter ?? "");
-    // Blank on the Chemicals and Natural bands, where the plan reserves whole columns
-    // and genuinely doesn't say which level a sample belongs on.
-    setShelfLevel(next?.level != null ? String(next.level) : "");
-    // Back to Auto: the sublevel that was right for the old cell isn't right for a new one.
+    // Keeps a cell the new zone still covers — see nextShelfAddress for why.
+    const moved = nextShelfAddress({ letter: shelfLetter, level: shelfLevel }, next);
+    setShelfLetter(moved.letter);
+    setShelfLevel(moved.level);
+    // Back to Auto: the sublevel that avoided a clash in the old cell isn't right for a
+    // new one. Safe on edit — the server excludes this sample when it checks what the
+    // cell already holds, so an unchanged address just keeps its sublevel.
     setShelfSublevel("");
   }
 

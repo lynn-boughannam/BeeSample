@@ -172,3 +172,40 @@ export function assignSublevel(cell: ShelfCellOccupancy | undefined): SublevelAs
   const next = nextFreeSublevel(cell.sublevels);
   return next ? { kind: "number", sublevel: next } : { kind: "full" };
 }
+
+// The shelf zone a Source/Category/Orientation combination resolves to, reduced to what
+// deciding an address needs. Structural rather than importing ShelfDefault, so this stays
+// free of the database module and safe for the form to use.
+export type ShelfZone = {
+  letter: string | null;
+  level: number | null;
+  zoneLetters: string[];
+  zoneLevels: number[];
+};
+
+/**
+ * Where a sample's address should go when its zone changes.
+ *
+ * An address the new zone still covers is kept. The bands that reserve whole columns
+ * (Chemicals A–B, Natural C–E) or a pair of levels (Organic F1–F2) leave the exact cell to
+ * the Admin, so re-defaulting would discard a deliberate choice — and for a sample that
+ * already exists, that choice is where the jar physically sits. Only an address the new
+ * zone doesn't contain gets re-defaulted.
+ */
+export function nextShelfAddress(
+  current: { letter: string; level: string },
+  zone: ShelfZone | undefined
+): { letter: string; level: string } {
+  return {
+    letter:
+      current.letter && zone?.zoneLetters.includes(current.letter)
+        ? current.letter
+        : (zone?.letter ?? ""),
+    level:
+      current.level && zone?.zoneLevels.includes(Number(current.level))
+        ? current.level
+        : zone?.level != null
+          ? String(zone.level)
+          : "",
+  };
+}
