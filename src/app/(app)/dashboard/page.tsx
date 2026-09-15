@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { AdminDashboard } from "./admin-dashboard";
+import { CheckoutSince, checkoutRowClass } from "@/components/checkout-since";
 
 async function FormulatorDashboard({ userId }: { userId: string }) {
-  const [myRequests, myOrders, feedbackDue] = await Promise.all([
+  const [myRequests, myOrders, feedbackDue, myPieces] = await Promise.all([
     prisma.sampleRequest.findMany({
       where: { requestedById: userId },
       include: { sample: true },
@@ -19,6 +21,13 @@ async function FormulatorDashboard({ userId }: { userId: string }) {
       where: { requestedById: userId, status: "APPROVED", feedback: null },
       include: { sample: true },
     }),
+    // SLT-40. Pieces an Admin currently has checked out to this user — read-only, same
+    // as everywhere else a Formulator sees their custody.
+    prisma.samplePiece.findMany({
+      where: { status: "CHECKED_OUT", checkedOutToUserId: userId },
+      include: { sample: { select: { id: true, sampleCode: true, rmName: true } } },
+      orderBy: { checkedOutAt: "desc" },
+    }),
   ]);
 
   return (
@@ -26,10 +35,43 @@ async function FormulatorDashboard({ userId }: { userId: string }) {
       <h1 className="text-page-title text-neutral-dark">Dashboard</h1>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard label="Currently With You" value={myPieces.length} />
         <StatCard label="My Requests" value={myRequests.length} />
         <StatCard label="My Orders" value={myOrders.length} />
         <StatCard label="Feedback Due" value={feedbackDue.length} />
       </div>
+
+      <Section title="Samples Currently With You">
+        {myPieces.length === 0 ? (
+          <Empty />
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white">
+            <ul className="divide-y divide-neutral-dark/8">
+              {myPieces.map((piece) => (
+                <li key={piece.id}>
+                  <Link
+                    href={`/library/${piece.sample.id}`}
+                    className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3 transition-colors duration-150 hover:bg-neutral-dark/[0.03] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-primary ${checkoutRowClass(piece.checkedOutAt)}`}
+                  >
+                    <span className="text-body font-medium text-neutral-dark">
+                      {piece.sample.sampleCode}
+                    </span>
+                    <span className="text-body text-neutral-dark/80">{piece.sample.rmName}</span>
+                    <span className="text-caption text-neutral-dark/50">
+                      piece #{piece.pieceIndex}
+                    </span>
+                    <span className="text-body ml-auto font-medium text-neutral-dark">
+                      {Number(piece.remainingWeightG).toFixed(2)} g
+                    </span>
+                    {/* Identical component to both other screens, so the colour matches. */}
+                    <CheckoutSince checkedOutAt={piece.checkedOutAt} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Section>
 
       <Section title="Feedback Due">
         {feedbackDue.length === 0 ? (

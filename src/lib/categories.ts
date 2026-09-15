@@ -51,7 +51,9 @@ export const DOCUMENT_AVAILABILITY = ["YES", "NO"] as const;
 
 export const SHELF_LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"] as const;
 export const SHELF_LEVELS = [1, 2, 3, 4, 5] as const;
-export const SHELF_SUBLEVELS = ["a", "b", "c", "d", "e"] as const;
+// Numeric since the 2026-09-15 sprint review — a cell's occupants read 1, 2, 3 rather
+// than a, b, c, so the whole address is digits and sorts naturally.
+export const SHELF_SUBLEVELS = [1, 2, 3, 4, 5] as const;
 
 export type ShelfSublevel = (typeof SHELF_SUBLEVELS)[number];
 
@@ -129,12 +131,14 @@ export function colorKeyFor(
 }
 
 // Formats a full shelf address, e.g. "H4" or "H4a".
+// "G3" on its own, "G3-2" once a cell holds more than one sample. The dash is load-bearing
+// now that the sublevel is numeric: "G32" would read as level 32.
 export function shelfAddress(
   letter: string,
   level: number,
-  sublevel?: string | null
+  sublevel?: number | null
 ): string {
-  return `${letter}${level}${sublevel ?? ""}`;
+  return `${letter}${level}${sublevel != null ? `-${sublevel}` : ""}`;
 }
 
 // Key for one shelf cell, used to look up which sublevels in it are already taken.
@@ -143,12 +147,12 @@ export function shelfCellKey(letter: string, level: number | string): string {
 }
 
 // What a shelf cell currently holds: how many samples sit there at all, and which
-// sublevel letters among them are spoken for.
-export type ShelfCellOccupancy = { total: number; sublevels: string[] };
+// sublevel numbers among them are spoken for.
+export type ShelfCellOccupancy = { total: number; sublevels: number[] };
 
-// The next sublevel letter free in a cell. Null once a–e are all in use, which the
-// caller surfaces as "this cell is full" rather than silently reusing a letter.
-export function nextFreeSublevel(used: readonly string[]): ShelfSublevel | null {
+// The next sublevel free in a cell. Null once 1–5 are all in use, which the caller
+// surfaces as "this cell is full" rather than silently reusing a number.
+export function nextFreeSublevel(used: readonly number[]): ShelfSublevel | null {
   const taken = new Set(used);
   return SHELF_SUBLEVELS.find((s) => !taken.has(s)) ?? null;
 }
@@ -157,14 +161,14 @@ export function nextFreeSublevel(used: readonly string[]): ShelfSublevel | null 
 // not an address component every sample needs (SLT-13: "optional, auto-suggested … used
 // when multiple samples share the same computed cell+level"), so the first sample in a
 // cell is just "H4". Only once something is already there does the next one take a
-// letter, which is what keeps two samples off the same address (SLT-19).
+// number, which is what keeps two samples off the same address (SLT-19).
 export type SublevelAssignment =
   | { kind: "none" }
-  | { kind: "letter"; sublevel: ShelfSublevel }
+  | { kind: "number"; sublevel: ShelfSublevel }
   | { kind: "full" };
 
 export function assignSublevel(cell: ShelfCellOccupancy | undefined): SublevelAssignment {
   if (!cell || cell.total === 0) return { kind: "none" };
   const next = nextFreeSublevel(cell.sublevels);
-  return next ? { kind: "letter", sublevel: next } : { kind: "full" };
+  return next ? { kind: "number", sublevel: next } : { kind: "full" };
 }

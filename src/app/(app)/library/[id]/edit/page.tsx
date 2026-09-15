@@ -90,7 +90,7 @@ export default async function EditSamplePage({
           documentAvailability: sample.documentAvailability ?? "",
           shelfLetter: sample.shelfLetter,
           shelfLevel: String(sample.shelfLevel),
-          shelfSublevel: sample.shelfSublevel ?? "",
+          shelfSublevel: sample.shelfSublevel != null ? String(sample.shelfSublevel) : "",
           ingredientIds: sample.ingredients.map((i) => i.ingredientId),
         }}
         submitLabel="Save changes"

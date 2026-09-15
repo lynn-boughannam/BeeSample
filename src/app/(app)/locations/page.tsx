@@ -16,15 +16,14 @@ type RackSample = {
   sampleCode: string;
   rmName: string;
   category: string;
-  shelfSublevel: string | null;
+  shelfSublevel: number | null;
   isDiscarded: boolean;
   stock: SampleStock;
-  health: "HEALTHY" | "LOW" | "ZERO" | "DISCARDED";
+  health: "HEALTHY" | "ZERO" | "DISCARDED";
 };
 
 const HEALTH_LABEL: Record<RackSample["health"], string> = {
   HEALTHY: "Healthy",
-  LOW: "Low stock",
   ZERO: "Zero stock",
   DISCARDED: "Discarded",
 };
@@ -33,7 +32,6 @@ const HEALTH_LABEL: Record<RackSample["health"], string> = {
 // "nothing in it" at a glance, which a solid red dot doesn't.
 const HEALTH_DOT: Record<RackSample["health"], string> = {
   HEALTHY: "bg-success border-success",
-  LOW: "bg-warning border-warning",
   ZERO: "border-dashed border-danger bg-transparent",
   DISCARDED: "bg-neutral-dark/25 border-neutral-dark/25",
 };
@@ -57,7 +55,6 @@ export default async function LocationsPage({
         shelfLevel: true,
         shelfSublevel: true,
         isDiscarded: true,
-        totalQtyG: true,
       },
       orderBy: [{ shelfLetter: "asc" }, { shelfLevel: "asc" }, { shelfSublevel: "asc" }],
     }),
@@ -78,7 +75,7 @@ export default async function LocationsPage({
     const sampleStock = stock[row.id] ?? EMPTY_STOCK;
     const health = row.isDiscarded
       ? "DISCARDED"
-      : (stockLevel(sampleStock, row.totalQtyG) as "HEALTHY" | "LOW" | "ZERO");
+      : stockLevel(sampleStock);
 
     const list = byCell.get(key) ?? [];
     list.push({
@@ -188,7 +185,7 @@ export default async function LocationsPage({
       <section className="rounded-lg border border-neutral-dark/10 bg-white p-4 shadow-elevated">
         <h2 className="text-section-header mb-2 text-neutral-dark">Stock health</h2>
         <ul className="flex flex-wrap gap-x-5 gap-y-2">
-          {(["HEALTHY", "LOW", "ZERO", "DISCARDED"] as const).map((h) => (
+          {(["HEALTHY", "ZERO", "DISCARDED"] as const).map((h) => (
             <li key={h} className="flex items-center gap-2">
               <span aria-hidden className={`h-3 w-3 rounded-full border-2 ${HEALTH_DOT[h]}`} />
               <span className="text-caption text-neutral-dark/70">{HEALTH_LABEL[h]}</span>

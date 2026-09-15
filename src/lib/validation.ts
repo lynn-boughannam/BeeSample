@@ -6,7 +6,6 @@ import {
   SAMPLE_CATEGORIES,
   SAMPLE_SOURCES,
   SHELF_LETTERS,
-  SHELF_SUBLEVELS,
 } from "@/lib/categories";
 import { BIODEGRADABILITY, TRISTATE, YES_NO } from "@/lib/ingredients";
 import { PIECE_MODES, pieceSumMessage, sumCents, toCents } from "@/lib/pieces";
@@ -61,9 +60,10 @@ export const CreateSampleSchema = z.object({
     .int()
     .min(1, "Shelf level must be between 1 and 5")
     .max(5, "Shelf level must be between 1 and 5"),
+  // "" is the Admin leaving it on None, which means "assign one if the cell needs it".
   shelfSublevel: z
-    .union([z.literal(""), z.enum(SHELF_SUBLEVELS)])
-    .transform((v) => (v === "" ? null : v))
+    .union([z.literal(""), z.coerce.number().int().min(1).max(5)])
+    .transform((v) => (v === "" ? null : Number(v)))
     .nullable(),
 });
 
@@ -217,6 +217,14 @@ export const UpdateUserSchema = z.object({
 export const CheckoutPieceSchema = z.object({
   pieceId: z.string().min(1),
   formulatorId: z.string().min(1, "Select a formulator to check this piece out to"),
+  // Admins often record a checkout after the fact, so the date is editable rather than
+  // fixed to "now". It also drives the overdue warning (SLT-57), so a piece that
+  // physically left the shelf last week should say so.
+  // "" means "leave it at today" — the action fills in the current timestamp.
+  checkedOutAt: z
+    .union([z.literal(""), z.iso.date("Enter a valid checkout date")])
+    .transform((v) => (v === "" ? null : v))
+    .nullable(),
 });
 
 export const LogPieceUsageSchema = z.object({

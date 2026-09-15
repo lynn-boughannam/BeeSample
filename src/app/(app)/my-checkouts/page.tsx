@@ -3,6 +3,7 @@ import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { shelfAddress } from "@/lib/categories";
 import { PIECE_STATUS_LABELS, type PieceStatus } from "@/lib/stock";
+import { CheckoutSince, checkoutRowClass } from "@/components/checkout-since";
 import { Badge } from "@/components/ui/badge";
 
 // SLT-57. Read-only by design: a Formulator never requests, checks out, or logs anything
@@ -87,7 +88,7 @@ export default async function MyCheckoutsPage() {
                   <li key={piece.id}>
                     <Link
                       href={`/library/${piece.sample.id}`}
-                      className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3 transition-colors duration-150 hover:bg-neutral-dark/[0.03] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-primary"
+                      className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3 transition-colors duration-150 hover:bg-neutral-dark/[0.03] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-primary ${checkoutRowClass(piece.checkedOutAt)}`}
                     >
                       <span className="text-body font-medium text-neutral-dark">
                         {piece.sample.sampleCode}
@@ -109,9 +110,7 @@ export default async function MyCheckoutsPage() {
                       <span className="text-body ml-auto font-medium text-neutral-dark">
                         {Number(piece.remainingWeightG).toFixed(2)} g
                       </span>
-                      <span className="text-caption text-neutral-dark/55">
-                        since {piece.checkedOutAt ? day(piece.checkedOutAt) : "—"}
-                      </span>
+                      <CheckoutSince checkedOutAt={piece.checkedOutAt} />
                     </Link>
                   </li>
                 ))}

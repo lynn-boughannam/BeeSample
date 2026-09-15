@@ -68,7 +68,7 @@ async function main() {
         sampleCode: PREFIX + "1", rmName: "my checkout sample", category: "Wax",
         function: "n/a", physicalForm: "Solid", source: "Synthetic", supplier: "n/a",
         expiryDate: new Date("2030-01-01"), totalQtyG: 20, receivedQtyPcs: 3,
-        shelfLetter: "G", shelfLevel: 3, shelfSublevel: "b", createdById: admin.id,
+        shelfLetter: "G", shelfLevel: 3, shelfSublevel: 2, createdById: admin.id,
         pieces: { create: [
           { pieceIndex: 1, originalWeightG: "5.00", remainingWeightG: "5.00", status: "IN_STOCK" },
           { pieceIndex: 2, originalWeightG: "5.00", remainingWeightG: "5.00", status: "IN_STOCK" },
@@ -120,7 +120,7 @@ async function main() {
     })));
     check("one piece currently with me", current.length, 1);
     check("sample code shown", current[0]?.sample.sampleCode, PREFIX + "1");
-    check("shelf location shown", shelfAddress(current[0].sample.shelfLetter, current[0].sample.shelfLevel, current[0].sample.shelfSublevel), "G3b");
+    check("shelf location shown", shelfAddress(current[0].sample.shelfLetter, current[0].sample.shelfLevel, current[0].sample.shelfSublevel), "G3-2");
     check("piece weight shown", Number(current[0].remainingWeightG).toFixed(2), "5.00");
     check("checkout date shown", current[0].checkedOutAt?.toISOString().slice(0, 10), "2026-09-13");
 

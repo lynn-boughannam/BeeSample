@@ -10,9 +10,14 @@ import { SampleActions } from "./sample-actions";
 import { StockPanel, type PieceRow } from "./stock-panel";
 import { discardSample, restoreSample, deleteSample } from "./actions";
 import { addReceivedStock, checkoutPiece, discardPieces, logPieceUsage } from "./stock-actions";
-import { stockFromPieces, type PieceStatus } from "@/lib/stock";
+import { stockFromPieces, getCheckoutWarningLevel, type PieceStatus } from "@/lib/stock";
 
 const day = (d: Date) => d.toISOString().slice(0, 10);
+
+// The server's calendar day. toISOString() would give the UTC day, which can be a day off
+// from the clock the checkout action compares against.
+const localDay = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 // Transaction.type is a plain string column (SQL Server has no enum) — see
 // TRANSACTION_TYPES in src/lib/types.ts for the full set.
@@ -98,6 +103,7 @@ export default async function SampleDetailPage({
     status: p.status as PieceStatus,
     checkedOutToName: p.checkedOutToUser?.name ?? null,
     checkedOutAt: p.checkedOutAt ? day(p.checkedOutAt) : null,
+    checkoutWarning: getCheckoutWarningLevel(p.checkedOutAt),
     discardReason: p.discardReason,
   }));
   const shelfSwatch =
@@ -233,6 +239,7 @@ export default async function SampleDetailPage({
           formulators={formulators}
           isAdmin={isAdmin}
           isDiscarded={sample.isDiscarded}
+          today={localDay(new Date())}
           sampleId={sample.id}
           checkoutAction={checkoutPiece}
           logUsageAction={logPieceUsage}

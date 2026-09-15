@@ -48,15 +48,68 @@ export function stockFromPieces(pieces: readonly CountedPiece[]): SampleStock {
   return { remainingQtyG: centsToGrams(cents), remainingQtyPcs: counted.length };
 }
 
-// Zero/low-stock thresholds (SLT-26). Kept here so the flags can only ever be derived
-// from the computed stock above, never from a stored column.
-export type StockLevel = "ZERO" | "LOW" | "HEALTHY";
+// Stock flagging (SLT-26). Two states only: a sample either has stock or it doesn't.
+// The amber "low stock" tier and its remaining/total percentage threshold were removed at
+// the 2026-09-15 sprint review — a proportional warning told people less than the plain
+// fact of whether anything is left.
+export type StockLevel = "ZERO" | "HEALTHY";
 
-export function stockLevel(stock: SampleStock, totalQtyG: unknown): StockLevel {
-  const remaining = toCents(Number(stock.remainingQtyG));
-  if (remaining <= 0) return "ZERO";
+export function stockLevel(stock: SampleStock): StockLevel {
+  return toCents(Number(stock.remainingQtyG)) <= 0 ? "ZERO" : "HEALTHY";
+}
 
-  const total = toCents(Number(totalQtyG));
-  if (total > 0 && remaining * 100 <= total * 15) return "LOW";
-  return "HEALTHY";
+// How overdue a checked-out piece is (SLT-57, shown by SLT-38 / SLT-40 / SLT-30).
+// Computed from checkedOutAt on every read — nothing is stored, so no job has to keep a
+// flag up to date and the state can never be stale.
+//
+// Defined once and imported by all three screens that show a since-date. Three copies of
+// "10" and "14" would drift apart the first time the policy changed.
+export const CHECKOUT_WARNING_DAYS = 10;
+export const CHECKOUT_OVERDUE_DAYS = 14;
+
+export type CheckoutWarningLevel = "NONE" | "WARNING" | "OVERDUE";
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// Whole days elapsed. `now` is injectable so the thresholds can be tested without waiting
+// two weeks.
+export function daysSinceCheckout(checkedOutAt: Date | null, now: Date = new Date()): number {
+  if (!checkedOutAt) return 0;
+  return Math.floor((now.getTime() - checkedOutAt.getTime()) / MS_PER_DAY);
+}
+
+export function getCheckoutWarningLevel(
+  checkedOutAt: Date | null,
+  now: Date = new Date()
+): CheckoutWarningLevel {
+  if (!checkedOutAt) return "NONE";
+  const days = daysSinceCheckout(checkedOutAt, now);
+  if (days >= CHECKOUT_OVERDUE_DAYS) return "OVERDUE";
+  if (days >= CHECKOUT_WARNING_DAYS) return "WARNING";
+  return "NONE";
+}
+
+// Shared presentation, so the same piece can't look amber on one screen and red on another.
+export const CHECKOUT_WARNING_CLASS: Record<CheckoutWarningLevel, string> = {
+  NONE: "text-neutral-dark/55",
+  WARNING: "font-medium text-warning",
+  OVERDUE: "font-semibold text-danger",
+};
+
+// Row-level treatment for a checked-out piece. The left border carries the signal even
+// where a tint is hard to see, and the tints stay light enough for the row's own text to
+// keep its contrast.
+export const CHECKOUT_ROW_CLASS: Record<CheckoutWarningLevel, string> = {
+  NONE: "",
+  WARNING: "border-l-4 border-l-warning bg-warning/10",
+  OVERDUE: "border-l-4 border-l-danger bg-danger/10",
+};
+
+export function checkoutWarningLabel(
+  level: CheckoutWarningLevel,
+  days: number
+): string | null {
+  if (level === "OVERDUE") return `${days} days out — overdue`;
+  if (level === "WARNING") return `${days} days out`;
+  return null;
 }

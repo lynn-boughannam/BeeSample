@@ -43,8 +43,8 @@ check("stored value", parsed.success ? String(parsed.data.fragranceOrientation) 
 
 console.log("\n=== Sublevel stays optional; blank means 'assign one' ===");
 check("blank sublevel parses to null", parsed.success ? String(parsed.data.shelfSublevel) : "(invalid)", "null");
-const explicit = CreateSampleWithPiecesSchema.safeParse({ ...base, shelfSublevel: "c" });
-check("explicit sublevel kept", explicit.success ? String(explicit.data.shelfSublevel) : "(invalid)", "c");
+const explicit = CreateSampleWithPiecesSchema.safeParse({ ...base, shelfSublevel: "3" });
+check("explicit sublevel kept", explicit.success ? String(explicit.data.shelfSublevel) : "(invalid)", "3");
 check("bogus sublevel rejected", CreateSampleWithPiecesSchema.safeParse({ ...base, shelfSublevel: "z" }).success, false);
 
 console.log("\n=== Shelf Level required 1-5 (SLT-13) ===");

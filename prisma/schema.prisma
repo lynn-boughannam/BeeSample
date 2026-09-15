@@ -245,7 +245,9 @@ model Sample {
   fragranceOrientation String? // the 13 sub-values under Category = Fragrance
   receivedQtyPcs       Int?
   netWeightG           Decimal? @db.Decimal(10, 2)
-  shelfSublevel        String? // letter suffix on the level, e.g. "1a"
+  // Numeric tie-breaker within a cell, e.g. "G3-2" (2026-09-15). Null for the first
+  // sample in a cell — a sublevel only exists once two samples share an address.
+  shelfSublevel        Int?
   hazardClass          String? // Hazardous | Non-Hazardous
   projectName          String?
   batchLot             String?
@@ -328,7 +330,7 @@ model LocationHistory {
   sample        Sample  @relation(fields: [sampleId], references: [id], onDelete: Cascade)
   shelfLetter   String
   shelfLevel    Int
-  shelfSublevel String?
+  shelfSublevel Int?
   movedAt     DateTime @default(now())
   movedById   String?
   movedBy     User?    @relation("MovedBy", fields: [movedById], references: [id], onDelete: NoAction, onUpdate: NoAction)

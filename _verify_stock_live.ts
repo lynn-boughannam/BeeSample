@@ -29,7 +29,7 @@ async function main() {
         "total (g)": s.totalQtyG.toString(),
         "remaining (g)": stock.remainingQtyG,
         "remaining (pcs)": stock.remainingQtyPcs,
-        flag: s.isDiscarded ? "DISCARDED" : stockLevel(stock, s.totalQtyG),
+        flag: s.isDiscarded ? "DISCARDED" : stockLevel(stock),
       };
     })
   );

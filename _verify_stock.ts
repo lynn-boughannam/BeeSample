@@ -219,9 +219,9 @@ async function main() {
 
     console.log("\n=== Counted statuses / stock flags ===");
     check("counted statuses", [...COUNTED_PIECE_STATUSES].join(","), "IN_STOCK,CHECKED_OUT");
-    check("3 of 10 g is LOW? (30%)", stockLevel(s, 10), "HEALTHY");
-    check("1 of 10 g is LOW (10%)", stockLevel({ remainingQtyG: "1.00", remainingQtyPcs: 1 }, 10), "LOW");
-    check("0 g is ZERO", stockLevel({ remainingQtyG: "0.00", remainingQtyPcs: 0 }, 10), "ZERO");
+    check("3 g remaining is HEALTHY", stockLevel(s), "HEALTHY");
+    check("1 g remaining is HEALTHY (no amber tier)", stockLevel({ remainingQtyG: "1.00", remainingQtyPcs: 1 }), "HEALTHY");
+    check("0 g is ZERO", stockLevel({ remainingQtyG: "0.00", remainingQtyPcs: 0 }), "ZERO");
 
     console.log("\n=== Transaction history ===");
     const txs = await prisma.transaction.findMany({

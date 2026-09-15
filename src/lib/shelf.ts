@@ -200,7 +200,7 @@ export async function cellOccupancyAt(
 
   return {
     total: rows.length,
-    sublevels: rows.map((r) => r.shelfSublevel).filter((s): s is string => s != null),
+    sublevels: rows.map((r) => r.shelfSublevel).filter((s): s is number => s != null),
   };
 }
 
@@ -223,7 +223,7 @@ export async function loadShelfOccupancy(excludeSampleId?: string): Promise<Shel
     const key = shelfCellKey(row.shelfLetter, row.shelfLevel);
     const cell = (out[key] ??= { total: 0, sublevels: [] });
     cell.total++;
-    if (row.shelfSublevel) cell.sublevels.push(row.shelfSublevel);
+    if (row.shelfSublevel != null) cell.sublevels.push(row.shelfSublevel);
   }
   return out;
 }

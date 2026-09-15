@@ -99,22 +99,22 @@ async function main() {
   const noOrient = await resolveShelfSlot(shelfClassificationFor("Synthetic", "Fragrance", null));
   check("Synthetic + Fragrance/(none)", render(noOrient), "(no match)");
 
-  console.log("\n=== 7. Sublevel: None by default, a letter only to avoid a clash ===");
+  console.log("\n=== 7. Sublevel: None by default, a number only to avoid a clash ===");
   const render7 = (a: ReturnType<typeof assignSublevel>) =>
-    a.kind === "letter" ? a.sublevel : a.kind;
+    a.kind === "number" ? String(a.sublevel) : a.kind;
   check("empty cell -> None", render7(assignSublevel(undefined)), "none");
   check("empty cell (explicit zero) -> None", render7(assignSublevel({ total: 0, sublevels: [] })), "none");
-  check("holds one unlettered sample -> a", render7(assignSublevel({ total: 1, sublevels: [] })), "a");
-  check("holds H4 + H4a -> b", render7(assignSublevel({ total: 2, sublevels: ["a"] })), "b");
-  check("holds H4a + H4b -> c", render7(assignSublevel({ total: 2, sublevels: ["a", "b"] })), "c");
-  check("gaps are reused", render7(assignSublevel({ total: 2, sublevels: ["c", "a"] })), "b");
-  check("sample + a-e -> full", render7(assignSublevel({ total: 6, sublevels: ["a","b","c","d","e"] })), "full");
+  check("holds one unnumbered sample -> 1", render7(assignSublevel({ total: 1, sublevels: [] })), "1");
+  check("holds H4 + H4-1 -> 2", render7(assignSublevel({ total: 2, sublevels: [1] })), "2");
+  check("holds H4-1 + H4-2 -> 3", render7(assignSublevel({ total: 2, sublevels: [1, 2] })), "3");
+  check("gaps are reused", render7(assignSublevel({ total: 2, sublevels: [3, 1] })), "2");
+  check("sample + 1-5 -> full", render7(assignSublevel({ total: 6, sublevels: [1, 2, 3, 4, 5] })), "full");
 
-  console.log("\n=== 7b. nextFreeSublevel still walks a-e in order ===");
-  check("empty", String(nextFreeSublevel([])), "a");
-  check("after a", String(nextFreeSublevel(["a"])), "b");
-  check("out of order a,c", String(nextFreeSublevel(["c", "a"])), "b");
-  check("full a-e", String(nextFreeSublevel(["a","b","c","d","e"])), "null");
+  console.log("\n=== 7b. nextFreeSublevel walks 1-5 in order ===");
+  check("empty", String(nextFreeSublevel([])), "1");
+  check("after 1", String(nextFreeSublevel([1])), "2");
+  check("out of order 1,3", String(nextFreeSublevel([3, 1])), "2");
+  check("full 1-5", String(nextFreeSublevel([1, 2, 3, 4, 5])), "null");
 
   console.log("\n=== 8. Swatch colour follows the same zone as the slot ===");
   check("Natural/Fragrance swatch key", colorKeyFor("Natural", "Fragrance", "Woody"), "Natural");

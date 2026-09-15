@@ -678,7 +678,7 @@ export function SampleForm({
                 invalid={Boolean(errors.shelfSublevel) || cellIsFull}
                 onChange={(e) => setShelfSublevel(e.target.value)}
               >
-                {/* None is the default. The server only substitutes a letter when the
+                {/* None is the default. The server only substitutes a number when the
                     cell already holds a sample, so two can't share an address. */}
                 <option value="">None</option>
                 {SHELF_SUBLEVELS.map((s) => (
@@ -690,10 +690,10 @@ export function SampleForm({
               {cellIsFull && (
                 <p className="text-caption mt-1 text-danger">
                   {shelfAddress(shelfLetter, Number(shelfLevel))} is full — it holds a sample
-                  plus sublevels a–e. Pick another level or row.
+                  plus sublevels 1–5. Pick another level or row.
                 </p>
               )}
-              {shelfSublevel === "" && autoSublevel?.kind === "letter" && (
+              {shelfSublevel === "" && autoSublevel?.kind === "number" && (
                 <p className="text-caption mt-1 text-neutral-dark/60">
                   {shelfAddress(shelfLetter, Number(shelfLevel))} already holds a sample, so
                   this one will be saved as{" "}

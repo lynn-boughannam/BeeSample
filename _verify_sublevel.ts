@@ -19,7 +19,7 @@ async function cellOccupancyAt(letter: string, level: number, excludeSampleId?: 
   });
   return {
     total: rows.length,
-    sublevels: rows.map((r) => r.shelfSublevel).filter((s): s is string => s != null),
+    sublevels: rows.map((r) => r.shelfSublevel).filter((s): s is number => s != null),
   };
 }
 
@@ -35,7 +35,7 @@ async function createAt(code: string, letter: string, level: number, userId: str
   // Exactly what the create action does: None unless the cell already holds something.
   const assigned = assignSublevel(await cellOccupancyAt(letter, level));
   if (assigned.kind === "full") throw new Error(letter + level + " is full");
-  const sublevel = assigned.kind === "letter" ? assigned.sublevel : null;
+  const sublevel = assigned.kind === "number" ? assigned.sublevel : null;
   await prisma.sample.create({
     data: {
       sampleCode: PREFIX + code, rmName: "verification row", category: "Wax",
@@ -55,8 +55,8 @@ async function main() {
   try {
     console.log("\n=== A cell's first sample gets no sublevel ===");
     check("1st sample into A1", await createAt("1", "A", 1, user.id), "None");
-    check("2nd sample into A1", await createAt("2", "A", 1, user.id), "a");
-    check("3rd sample into A1", await createAt("3", "A", 1, user.id), "b");
+    check("2nd sample into A1", await createAt("2", "A", 1, user.id), "1");
+    check("3rd sample into A1", await createAt("3", "A", 1, user.id), "2");
     check("a different cell starts over", await createAt("4", "B", 3, user.id), "None");
 
     const addresses = (
@@ -75,7 +75,7 @@ async function main() {
     check("J2 occupants", j2.total, 2);
     check("J2 lettered occupants", j2.sublevels.length, 0);
     const j2next = assignSublevel(j2);
-    check("a new J2 sample takes a letter", j2next.kind === "letter" ? j2next.sublevel : j2next.kind, "a");
+    check("a new J2 sample takes a number", j2next.kind === "number" ? j2next.sublevel : j2next.kind, 1);
 
     console.log("\n=== Discarding frees the space back up ===");
     const first = await prisma.sample.findFirst({ where: { sampleCode: PREFIX + "1" }, select: { id: true } });
@@ -85,12 +85,12 @@ async function main() {
     });
     const afterDiscard = await cellOccupancyAt("A", 1);
     check("A1 occupants after discarding the unlettered one", afterDiscard.total, 2);
-    check("A1 letters still held", afterDiscard.sublevels.sort().join(","), "a,b");
+    check("A1 sublevels still held", afterDiscard.sublevels.sort().join(","), "1,2");
 
     console.log("\n=== Editing a sample doesn't collide with itself ===");
     const second = await prisma.sample.findFirst({ where: { sampleCode: PREFIX + "2" }, select: { id: true } });
     const excludingSelf = await cellOccupancyAt("A", 1, second!.id);
-    check("A1 excluding itself", excludingSelf.sublevels.join(","), "b");
+    check("A1 excluding itself", excludingSelf.sublevels.join(","), "2");
 
   } finally {
     const { count } = await prisma.sample.deleteMany({ where: { sampleCode: { startsWith: PREFIX } } });

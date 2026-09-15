@@ -100,21 +100,21 @@ export async function updateSample(
 
   if (shelfSublevel === null) {
     // None is the default and stays None while the sample is the only one in the cell.
-    // A letter is taken only once something else is already there, so two samples can't
+    // A number is taken only once something else is already there, so two samples can't
     // end up at the same address.
     const assigned = assignSublevel(occupancy);
     if (assigned.kind === "full") {
       return {
         fieldErrors: {
-          shelfSublevel: `${cell} is full — it holds a sample plus sublevels a–e. Choose another level or row.`,
+          shelfSublevel: `${cell} is full — it holds a sample plus sublevels 1–5. Choose another level or row.`,
         },
       };
     }
-    shelfSublevel = assigned.kind === "letter" ? assigned.sublevel : null;
+    shelfSublevel = assigned.kind === "number" ? assigned.sublevel : null;
   } else if (occupancy.sublevels.includes(shelfSublevel)) {
     return {
       fieldErrors: {
-        shelfSublevel: `${cell}${shelfSublevel} is already taken. Leave this on None to be given the next free sublevel.`,
+        shelfSublevel: `${cell}-${shelfSublevel} is already taken. Leave this on None to be given the next free sublevel.`,
       },
     };
   }

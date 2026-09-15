@@ -40,14 +40,14 @@ async function main() {
   await prisma.sample.create({
     data: {
       ...base, sampleCode: PREFIX + "HEALTHY", totalQtyG: 10, shelfLetter: "G", shelfLevel: 3,
-      shelfSublevel: "a",
+      shelfSublevel: 1,
       pieces: { create: [{ pieceIndex: 1, originalWeightG: "10.00", remainingWeightG: "10.00", status: "IN_STOCK" }] },
     },
   });
   await prisma.sample.create({
     data: {
       ...base, sampleCode: PREFIX + "ZERO", totalQtyG: 10, shelfLetter: "G", shelfLevel: 3,
-      shelfSublevel: "b",
+      shelfSublevel: 2,
       // Fully consumed: the piece is DEPLETED, so it counts toward neither g nor pcs.
       pieces: { create: [{ pieceIndex: 1, originalWeightG: "10.00", remainingWeightG: "0.00", status: "DEPLETED" }] },
     },
@@ -55,7 +55,7 @@ async function main() {
   await prisma.sample.create({
     data: {
       ...base, sampleCode: PREFIX + "DISCARDED", totalQtyG: 10, shelfLetter: "G", shelfLevel: 3,
-      shelfSublevel: "c", isDiscarded: true, discardedById: admin.id, discardedAt: new Date(),
+      shelfSublevel: 3, isDiscarded: true, discardedById: admin.id, discardedAt: new Date(),
       pieces: { create: [{ pieceIndex: 1, originalWeightG: "10.00", remainingWeightG: "0.00", status: "DEPLETED" }] },
     },
   });
@@ -109,7 +109,7 @@ async function main() {
     const byCell = new Map<string, Array<{ code: string; health: string }>>();
     for (const r of rows) {
       const key = shelfCellKey(r.shelfLetter, r.shelfLevel);
-      const health = r.isDiscarded ? "DISCARDED" : stockLevel(stockFromPieces(r.pieces), r.totalQtyG);
+      const health = r.isDiscarded ? "DISCARDED" : stockLevel(stockFromPieces(r.pieces));
       byCell.set(key, [...(byCell.get(key) ?? []), { code: r.sampleCode, health }]);
     }
 
@@ -144,7 +144,8 @@ async function main() {
     check("healthy sample", mine.find((s) => s.code.endsWith("HEALTHY"))?.health, "HEALTHY");
     check("zero sample", mine.find((s) => s.code.endsWith("ZERO"))?.health, "ZERO");
     check("discarded outranks zero (no double-flag)", mine.find((s) => s.code.endsWith("DISCARDED"))?.health, "DISCARDED");
-    check("low sample on G2", (byCell.get("G2") ?? []).find((s) => s.code.endsWith("LOW"))?.health, "LOW");
+    // The amber tier is gone: a 10%-remaining sample is simply HEALTHY now.
+    check("low-ish sample on G2 is HEALTHY", (byCell.get("G2") ?? []).find((s) => s.code.endsWith("LOW"))?.health, "HEALTHY");
   } finally {
     await prisma.samplePiece.deleteMany({ where: { sample: { sampleCode: { startsWith: PREFIX } } } });
     await prisma.sample.deleteMany({ where: { sampleCode: { startsWith: PREFIX } } });

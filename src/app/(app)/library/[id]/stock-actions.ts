@@ -24,6 +24,23 @@ function fieldErrorsFrom(error: { issues: { path: PropertyKey[]; message: string
   return fieldErrors;
 }
 
+// Turns the form's yyyy-mm-dd into the timestamp to store, or null if the date is in the
+// future — which would make the piece look checked out before it happened and read as
+// negative days on every overdue warning.
+function resolveCheckoutDate(input: string | null): Date | null {
+  const now = new Date();
+  if (!input) return now;
+
+  const [y, m, d] = input.split("-").map(Number);
+  // Constructed field-by-field rather than via Date.parse, which reads a bare yyyy-mm-dd
+  // as UTC and can land on the previous day once the server's offset is applied.
+  const picked = new Date(y, m - 1, d);
+
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (picked.getTime() > startOfToday.getTime()) return null;
+  return picked.getTime() === startOfToday.getTime() ? now : picked;
+}
+
 // SLT-56. Checkout is a custody record and nothing else: the piece keeps its weight and
 // keeps counting toward the sample's stock until usage is actually logged against it.
 export async function checkoutPiece(
@@ -35,10 +52,19 @@ export async function checkoutPiece(
   const parsed = CheckoutPieceSchema.safeParse({
     pieceId: formData.get("pieceId"),
     formulatorId: formData.get("formulatorId"),
+    checkedOutAt: formData.get("checkedOutAt"),
   });
   if (!parsed.success) return { fieldErrors: fieldErrorsFrom(parsed.error) };
 
   const { pieceId, formulatorId } = parsed.data;
+
+  // A date-only input can't say "now", so today keeps the real timestamp — that's what
+  // orders same-day checkouts correctly in "Who has what". Any earlier date is stored at
+  // local midnight: the piece has been out "since that day".
+  const checkedOutAt = resolveCheckoutDate(parsed.data.checkedOutAt);
+  if (!checkedOutAt) {
+    return { fieldErrors: { checkedOutAt: "A checkout can't be dated in the future." } };
+  }
 
   const piece = await prisma.samplePiece.findUnique({
     where: { id: pieceId },
@@ -73,7 +99,7 @@ export async function checkoutPiece(
         data: {
           status: "CHECKED_OUT",
           checkedOutToUserId: formulator.id,
-          checkedOutAt: new Date(),
+          checkedOutAt,
         },
       });
 

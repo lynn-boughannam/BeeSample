@@ -67,7 +67,7 @@ async function main() {
     documentAvailability: richest.documentAvailability ?? "",
     shelfLetter: richest.shelfLetter,
     shelfLevel: String(richest.shelfLevel),
-    shelfSublevel: richest.shelfSublevel ?? "",
+    shelfSublevel: richest.shelfSublevel != null ? String(richest.shelfSublevel) : "",
   };
 
   const rows: Array<Record<string, string>> = [];

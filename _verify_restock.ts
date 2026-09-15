@@ -141,7 +141,7 @@ async function main() {
     check("no change occurred (still 0 g)", before.remainingQtyG, "0.00");
 
     console.log("\n=== AC3 + AC1: restocking a zero-stock sample ===");
-    check("starts at ZERO", stockLevel(before, 10), "ZERO");
+    check("starts at ZERO", stockLevel(before), "ZERO");
     check("starts with 0 pcs", before.remainingQtyPcs, 0);
 
     await addStock(zero.id, 25, admin.id);
@@ -150,7 +150,7 @@ async function main() {
     const reloaded = await prisma.sample.findUniqueOrThrow({ where: { id: zero.id } });
     check("remaining increased by 25", after.remainingQtyG, "25.00");
     check("total increased by 25", reloaded.totalQtyG.toString(), "35");
-    check("zero-stock flag cleared", stockLevel(after, reloaded.totalQtyG), "HEALTHY");
+    check("zero-stock flag cleared", stockLevel(after), "HEALTHY");
     check("pcs back above 0", after.remainingQtyPcs, 1);
     check(
       "reception date updated to today",

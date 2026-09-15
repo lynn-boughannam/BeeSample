@@ -124,7 +124,7 @@ async function main() {
   await prisma.sampleOrder.create({
     data: {
       newRmName: PREFIX + "INPROGRESS", supplier: "Acme", orderedById: admin.id, status: "APPROVED",
-      approvedById: admin.id, decidedAt: new Date("2026-09-14"), prNumber: "PR-9001",
+      approvedById: admin.id, decidedAt: new Date(), prNumber: "PR-9001",
     },
   });
 
@@ -133,7 +133,7 @@ async function main() {
 
     console.log("\n=== AC1: KPI row carries real counts ===");
     check("total samples +3 (discarded excluded)", after.kpis.totalSamples - before.kpis.totalSamples, 3);
-    check("low stock +1", after.kpis.lowStock - before.kpis.lowStock, 1);
+    check("discarded samples +1", after.kpis.discardedSamples - before.kpis.discardedSamples, 1);
     check("zero stock +1", after.kpis.zeroStock - before.kpis.zeroStock, 1);
     check("pending requests +1", after.kpis.pendingRequests - before.kpis.pendingRequests, 1);
     check("checked out +1", after.kpis.checkedOut - before.kpis.checkedOut, 1);
@@ -142,10 +142,10 @@ async function main() {
     check("feedback due +1 (only the unreported one)", after.kpis.feedbackDue - before.kpis.feedbackDue, 1);
 
     console.log("\n=== Stock health strip ===");
-    console.log(`  healthy ${after.stockHealth.healthy} · low ${after.stockHealth.low} · zero ${after.stockHealth.zero} · total ${after.stockHealth.total}`);
+    console.log(`  healthy ${after.stockHealth.healthy} · zero ${after.stockHealth.zero} · total ${after.stockHealth.total}`);
     check(
       "segments sum to total (strip is proportional)",
-      after.stockHealth.healthy + after.stockHealth.low + after.stockHealth.zero,
+      after.stockHealth.healthy + after.stockHealth.zero,
       after.stockHealth.total
     );
     check("total matches the KPI tile", after.stockHealth.total, after.kpis.totalSamples);

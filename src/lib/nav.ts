@@ -14,6 +14,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "library", label: "Sample Library", href: "/library", roles: ["ADMIN", "FORMULATOR"] },
   { key: "add-sample", label: "Add Sample", href: "/library/add", roles: ["ADMIN"] },
   { key: "locations", label: "Locations & Stock", href: "/locations", roles: ["ADMIN", "FORMULATOR"] },
+  { key: "checked-out", label: "Checked Out", href: "/checked-out", roles: ["ADMIN"] },
   { key: "my-checkouts", label: "My Checkouts", href: "/my-checkouts", roles: ["FORMULATOR"] },
   { key: "ingredients", label: "Ingredient List", href: "/ingredients", roles: ["ADMIN", "FORMULATOR"] },
   { key: "requests", label: "Sample Requests", href: "/requests", roles: ["ADMIN", "FORMULATOR"] },

@@ -4,7 +4,12 @@ import { useActionState, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select } from "@/components/ui/input";
-import { PIECE_STATUS_LABELS, type PieceStatus } from "@/lib/stock";
+import {
+  CHECKOUT_ROW_CLASS,
+  PIECE_STATUS_LABELS,
+  type CheckoutWarningLevel,
+  type PieceStatus,
+} from "@/lib/stock";
 import type { StockActionState } from "./stock-actions";
 
 export type PieceRow = {
@@ -15,6 +20,9 @@ export type PieceRow = {
   status: PieceStatus;
   checkedOutToName: string | null;
   checkedOutAt: string | null;
+  // Computed on the server from the raw date, since this component only receives the
+  // formatted string. Same levels as every other screen (SLT-57).
+  checkoutWarning: CheckoutWarningLevel;
   discardReason: string | null;
 };
 
@@ -38,6 +46,7 @@ export function StockPanel({
   formulators,
   isAdmin,
   isDiscarded,
+  today,
   sampleId,
   checkoutAction,
   logUsageAction,
@@ -51,6 +60,10 @@ export function StockPanel({
   // same piece list read-only, rather than buttons that bounce them to the dashboard.
   isAdmin: boolean;
   isDiscarded: boolean;
+  // The server's today, as yyyy-mm-dd. Passed in rather than computed here so the date
+  // picker's ceiling matches the clock the action validates against, and so the markup
+  // doesn't differ between the server render and hydration.
+  today: string;
   checkoutAction: (prev: StockActionState, fd: FormData) => Promise<StockActionState>;
   logUsageAction: (prev: StockActionState, fd: FormData) => Promise<StockActionState>;
   addStockAction: (prev: StockActionState, fd: FormData) => Promise<StockActionState>;
@@ -112,7 +125,7 @@ export function StockPanel({
         {pieces.map((piece) => {
           const isOpen = openPieceId === piece.id;
           return (
-            <li key={piece.id} className="p-3">
+            <li key={piece.id} className={`p-3 ${CHECKOUT_ROW_CLASS[piece.checkoutWarning]}`}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
                   {/* Only in-stock pieces are selectable — a checked-out one has to be
@@ -199,6 +212,23 @@ export function StockPanel({
                         </option>
                       ))}
                     </Select>
+                  </FormField>
+                  {/* Defaults to today. Backdating is allowed because a checkout is often
+                      recorded after the fact; the max attribute stops the picker offering
+                      a future date, and the action rejects one anyway. */}
+                  <FormField
+                    label="Checkout date"
+                    htmlFor={`checked-out-at-${piece.id}`}
+                    error={checkoutState?.fieldErrors?.checkedOutAt}
+                  >
+                    <Input
+                      id={`checked-out-at-${piece.id}`}
+                      name="checkedOutAt"
+                      type="date"
+                      max={today}
+                      defaultValue={today}
+                      invalid={Boolean(checkoutState?.fieldErrors?.checkedOutAt)}
+                    />
                   </FormField>
                   <Button type="submit" disabled={checkingOut}>
                     {checkingOut ? "Checking out…" : "Confirm checkout"}

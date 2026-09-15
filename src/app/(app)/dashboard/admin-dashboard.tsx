@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { loadAdminDashboard, type ActivityKind, type CategoryBar } from "@/lib/dashboard";
+import { CheckoutSince, checkoutRowClass } from "@/components/checkout-since";
 
 // SLT-59. Five sections, all fed from loadAdminDashboard() so the page itself holds no
 // query logic and the numbers are verifiable without rendering.
@@ -39,10 +40,10 @@ export async function AdminDashboard() {
 
   const tiles: Kpi[] = [
     { label: "Total Samples", value: kpis.totalSamples, href: "/library" },
-    { label: "Low Stock", value: kpis.lowStock, href: "/library?stock=LOW", tone: "warning" },
     { label: "Zero Stock", value: kpis.zeroStock, href: "/library?stock=ZERO", tone: "danger" },
+    { label: "Discarded Samples", value: kpis.discardedSamples, href: "/library?discarded=1" },
     { label: "Sample Requests", value: kpis.pendingRequests, href: "/requests" },
-    { label: "Checked Out", value: kpis.checkedOut, href: "/locations" },
+    { label: "Checked Out", value: kpis.checkedOut, href: "/checked-out" },
     { label: "New Orders", value: kpis.newOrders, href: "/orders" },
     { label: "Orders in Progress", value: kpis.ordersInProgress, href: "/orders" },
     { label: "Feedback Due", value: kpis.feedbackDue, href: "/pending-feedback" },
@@ -87,7 +88,6 @@ export async function AdminDashboard() {
                 {(
                   [
                     ["healthy", stockHealth.healthy, "var(--color-success)"],
-                    ["low", stockHealth.low, "var(--color-warning)"],
                     ["zero", stockHealth.zero, "var(--color-danger)"],
                   ] as const
                 )
@@ -106,7 +106,6 @@ export async function AdminDashboard() {
                 {(
                   [
                     ["Healthy", stockHealth.healthy, "var(--color-success)"],
-                    ["Low", stockHealth.low, "var(--color-warning)"],
                     ["Zero", stockHealth.zero, "var(--color-danger)"],
                   ] as const
                 ).map(([label, count, color]) => (
@@ -153,7 +152,7 @@ export async function AdminDashboard() {
                     <li key={piece.pieceId}>
                       <Link
                         href={`/library/${piece.sampleId}`}
-                        className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 transition-colors duration-150 hover:bg-neutral-dark/[0.03] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-primary"
+                        className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 transition-colors duration-150 hover:bg-neutral-dark/[0.03] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-primary ${checkoutRowClass(piece.since)}`}
                       >
                         <span className="text-body font-medium text-neutral-dark">
                           {piece.sampleCode}
@@ -165,9 +164,7 @@ export async function AdminDashboard() {
                         <span className="text-caption ml-auto text-neutral-dark/70">
                           {piece.remainingWeightG} g
                         </span>
-                        <span className="text-caption text-neutral-dark/55">
-                          since {piece.since ? day(piece.since) : "—"}
-                        </span>
+                        <CheckoutSince checkedOutAt={piece.since} />
                       </Link>
                     </li>
                   ))}

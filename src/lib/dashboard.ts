@@ -9,8 +9,8 @@ import { stockLevel, EMPTY_STOCK, type StockLevel, type SampleStock } from "@/li
 
 export type DashboardKpis = {
   totalSamples: number;
-  lowStock: number;
   zeroStock: number;
+  discardedSamples: number;
   pendingRequests: number;
   checkedOut: number;
   newOrders: number;
@@ -53,7 +53,7 @@ export type ActivityEntry = {
 
 export type AdminDashboard = {
   kpis: DashboardKpis;
-  stockHealth: { healthy: number; low: number; zero: number; total: number };
+  stockHealth: { healthy: number; zero: number; total: number };
   byCategory: CategoryBar[];
   checkedOut: CheckedOutGroup[];
   activity: ActivityEntry[];
@@ -88,6 +88,7 @@ export async function loadAdminDashboard(): Promise<AdminDashboard> {
     feedbackDue,
     newOrders,
     ordersInProgress,
+    discardedSamples,
   ] = await Promise.all([
     loadSampleStock(samples.map((s) => s.id)),
     loadCategoryColors(),
@@ -106,18 +107,19 @@ export async function loadAdminDashboard(): Promise<AdminDashboard> {
     // Past approval, not yet received. ORDER_STATUSES has no separate "ordered" state, so
     // an approved order that's been raised as a PR is still APPROVED here.
     prisma.sampleOrder.count({ where: { status: "APPROVED" } }),
+    // Counts samples, not pieces, so the tile agrees with the list it links to
+    // (/library?discarded=1 shows discarded samples).
+    prisma.sample.count({ where: { isDiscarded: true } }),
   ]);
 
   let healthy = 0;
-  let low = 0;
   let zero = 0;
   const categoryCounts = new Map<string, number>();
 
   for (const sample of samples) {
     const sampleStock: SampleStock = stock[sample.id] ?? EMPTY_STOCK;
-    const level: StockLevel = stockLevel(sampleStock, sample.totalQtyG);
+    const level: StockLevel = stockLevel(sampleStock);
     if (level === "ZERO") zero++;
-    else if (level === "LOW") low++;
     else healthy++;
 
     categoryCounts.set(sample.category, (categoryCounts.get(sample.category) ?? 0) + 1);
@@ -155,15 +157,15 @@ export async function loadAdminDashboard(): Promise<AdminDashboard> {
   return {
     kpis: {
       totalSamples: samples.length,
-      lowStock: low,
       zeroStock: zero,
+      discardedSamples,
       pendingRequests,
       checkedOut: checkedOutPieces.length,
       newOrders,
       ordersInProgress,
       feedbackDue,
     },
-    stockHealth: { healthy, low, zero, total: samples.length },
+    stockHealth: { healthy, zero, total: samples.length },
     byCategory,
     checkedOut,
     activity: await loadActivity(),
