@@ -9,6 +9,8 @@ import {
   TRISTATE_LABELS,
   type Biodegradability,
   type Tristate,
+  isIncomplete,
+  INCOMPLETE_NOTE,
 } from "@/lib/ingredients";
 
 export default async function IngredientDetailPage({
@@ -52,6 +54,18 @@ export default async function IngredientDetailPage({
           )}
         </div>
       </div>
+
+      {/* SLT-18. Amber and inert: it says the record hasn't been started on, it doesn't
+          stop anyone using the ingredient. One filled safety field is enough to clear it. */}
+      {isIncomplete(ing) && (
+        <p
+          role="status"
+          className="text-body flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-on-warning"
+        >
+          <span aria-hidden className="leading-none">&#9888;</span>
+          {INCOMPLETE_NOTE}
+        </p>
+      )}
 
       <Card title="Ratings">
         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">

@@ -28,14 +28,18 @@ export function TableRow({
   children,
   className,
   onClick,
+  title,
 }: {
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
+  // Native tooltip, for rows whose styling carries a meaning worth spelling out.
+  title?: string;
 }) {
   return (
     <tr
       onClick={onClick}
+      title={title}
       className={cn(
         "transition-[box-shadow,background-color] duration-150",
         onClick && "cursor-pointer hover:bg-neutral-dark/[0.02] hover:shadow-elevated",

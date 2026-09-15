@@ -13,6 +13,7 @@ import {
   TableHeaderCell,
   TableRow,
 } from "@/components/ui/table";
+import { isIncomplete, INCOMPLETE_ROW_CLASS, INCOMPLETE_NOTE } from "@/lib/ingredients";
 import { DeleteIngredient } from "./delete-ingredient";
 import { deleteIngredient } from "./actions";
 import {
@@ -184,7 +185,13 @@ export default async function IngredientsPage({
             />
           ) : (
             ingredients.map((ing) => (
-              <TableRow key={ing.id}>
+              // SLT-18: an amber tint where none of the 16 safety/regulatory fields has
+              // been filled in. A nudge, not an error — the record still works.
+              <TableRow
+                key={ing.id}
+                className={isIncomplete(ing) ? INCOMPLETE_ROW_CLASS : undefined}
+                title={isIncomplete(ing) ? INCOMPLETE_NOTE : undefined}
+              >
                 {visibleColumns.map((col, i) => (
                   <TableCell key={col.key} className={col.numeric ? "text-right" : undefined}>
                     {/* Whichever column is first carries the link to the record. */}
