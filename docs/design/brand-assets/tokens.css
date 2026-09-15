@@ -1,0 +1,40 @@
+/* docs/design/brand-assets/tokens.css
+   Source: palette.json (BeeSample, Gemini-generated + semantic additions)
+   Contrast-checked against WCAG AA (4.5:1 minimum for text).
+   Import into src/app/globals.css, e.g.:
+     @import "tailwindcss";
+     @import "../../docs/design/brand-assets/tokens.css";
+   or paste the @theme block directly into globals.css.
+*/
+
+@theme {
+  /* ---- Brand ---- */
+  --color-brand-primary: #CCFF00;      /* Electric Lime — main CTAs. ALWAYS pair with --color-on-primary, never white text. 13.05:1 contrast. */
+  --color-brand-secondary: #132A13;    /* Deep Forest Green — dark surfaces, primary text on light bg */
+  --color-brand-accent: #31E981;       /* Vibrant Lime Green — secondary highlights, success. 9.57:1 with dark text. */
+  --color-brand-soft: #D8C7FF;         /* Soft Lilac — tag/chip backgrounds. 9.90:1 with dark text. */
+
+  /* ---- Neutrals ---- */
+  --color-neutral-dark: #1E252B;       /* Charcoal — card bg (dark mode), body text (light mode). 14.62:1 on cream. */
+  --color-neutral-light: #FAF8F5;      /* Warm Cream — light theme bg, card containers */
+
+  /* ---- Semantic status ----
+     Not in original Gemini output — derived to match the lime/forest palette family.
+     success reuses brand-accent since it already reads as "positive." */
+  --color-success: #31E981;            /* = brand-accent. dark text, 9.57:1 */
+  --color-warning: #E8A33D;            /* warm amber. dark text, 7.12:1 */
+  --color-danger: #C1292E;             /* deep red. white text, 5.79:1 */
+  --color-info: #3D5A99;               /* steel blue. white text, 6.73:1 */
+
+  /* ---- Text-on-color pairings ----
+     Use these instead of hardcoding text-white / text-black — prevents
+     the "white text on lime" mistake from ever happening again. */
+  --color-on-primary: #132A13;
+  --color-on-secondary: #FAF8F5;
+  --color-on-accent: #132A13;
+  --color-on-soft: #132A13;
+  --color-on-success: #132A13;
+  --color-on-warning: #132A13;
+  --color-on-danger: #FAF8F5;
+  --color-on-info: #FAF8F5;
+}

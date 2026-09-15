@@ -1,0 +1,37 @@
+{
+  "takenAt": "2026-09-10T13:40:10.219Z",
+  "pieces": [
+    {
+      "sampleId": "cmtvgeyqo0000p45fwej6g07b",
+      "pieceIndex": 1,
+      "weightG": "11.5"
+    },
+    {
+      "sampleId": "cmtvgeyqo0000p45fwej6g07b",
+      "pieceIndex": 2,
+      "weightG": "11.5"
+    }
+  ],
+  "pieceless": [
+    {
+      "sampleId": "cmtr96u910000h85fxgsu7e1a",
+      "sampleCode": "S-2601",
+      "remainingQtyG": "5"
+    },
+    {
+      "sampleId": "cmtr9zgid0000m05f5x8pciyq",
+      "sampleCode": "S-2602",
+      "remainingQtyG": "250.5"
+    },
+    {
+      "sampleId": "cmtsabtjr0000m05f9r1n5n8v",
+      "sampleCode": "S-2603",
+      "remainingQtyG": "19.97"
+    },
+    {
+      "sampleId": "cmttr2tne0005n05fbj40nwn2",
+      "sampleCode": "S-2607",
+      "remainingQtyG": "20"
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+{
+    "brand_name": "BeeSample",
+    "theme": "Modern Inventory Management",
+    "color_palette": {
+        "primary": {
+            "name": "Electric Chartreuse / Lime",
+            "hex": "#CCFF00",
+            "rgb": "rgb(204, 255, 0)",
+            "usage": "Primary brand accent, main action buttons, highlight elements, light mode background",
+            "text_on_color": "#132A13",
+            "contrast_ratio": "13.05:1",
+            "note": "Never pair with white text — fails contrast (1.18:1). Always use dark text."
+        },
+        "secondary": {
+            "name": "Deep Forest Green",
+            "hex": "#132A13",
+            "rgb": "rgb(19, 42, 19)",
+            "usage": "Dark mode background, primary text on light background, headers",
+            "text_on_color": "#FAF8F5"
+        },
+        "accent": {
+            "name": "Vibrant Lime Green",
+            "hex": "#31E981",
+            "rgb": "rgb(49, 233, 129)",
+            "usage": "Gradients, secondary highlights, success badges, status indicators",
+            "text_on_color": "#132A13",
+            "contrast_ratio": "9.57:1"
+        },
+        "neutral_dark": {
+            "name": "Dark Slate / Charcoal",
+            "hex": "#1E252B",
+            "rgb": "rgb(30, 37, 43)",
+            "usage": "Card backgrounds, dark theme elements, primary body text in light mode"
+        },
+        "neutral_light": {
+            "name": "Warm Cream / Off-White",
+            "hex": "#FAF8F5",
+            "rgb": "rgb(250, 248, 245)",
+            "usage": "Light theme background, card containers, subtle section fills",
+            "text_on_color": "#1E252B",
+            "contrast_ratio": "14.62:1"
+        },
+        "soft_accent": {
+            "name": "Soft Lilac",
+            "hex": "#D8C7FF",
+            "rgb": "rgb(216, 199, 255)",
+            "usage": "Secondary tag background, subtle contrast accents, notification chips",
+            "text_on_color": "#132A13",
+            "contrast_ratio": "9.90:1"
+        }
+    },
+    "semantic_colors": {
+        "note": "Not part of the original Gemini-generated palette. Derived to match the lime/forest/cream brand family and cover procurement approval states, sample errors, and stock alerts.",
+        "success": {
+            "hex": "#31E981",
+            "usage": "Approved orders, successful checkout, positive status badges",
+            "text_on_color": "#132A13",
+            "contrast_ratio": "9.57:1",
+            "source": "reused from accent"
+        },
+        "warning": {
+            "hex": "#E8A33D",
+            "name": "Warm Amber",
+            "usage": "Pending review, low stock alerts, non-blocking issues",
+            "text_on_color": "#132A13",
+            "contrast_ratio": "7.12:1"
+        },
+        "danger": {
+            "hex": "#C1292E",
+            "name": "Deep Red",
+            "usage": "Rejected orders, errors, destructive actions (delete sample)",
+            "text_on_color": "#FAF8F5",
+            "contrast_ratio": "5.79:1"
+        },
+        "info": {
+            "hex": "#3D5A99",
+            "name": "Steel Blue",
+            "usage": "Informational banners, neutral system messages",
+            "text_on_color": "#FAF8F5",
+            "contrast_ratio": "6.73:1"
+        }
+    }
+}

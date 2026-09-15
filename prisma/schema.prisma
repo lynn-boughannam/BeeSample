@@ -1,0 +1,500 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+}
+
+// SQL Server has no native enum type, so Prisma's `enum` isn't supported on this
+// connector. These are plain strings; valid values are enforced in application code
+// (see src/lib/types.ts) rather than at the DB layer.
+// RequestStatus: "PENDING" | "APPROVED" | "DENIED" | "RETURNED"
+// OrderStatus: "PENDING" | "APPROVED" | "DENIED" | "RECEIVED"
+// TransactionType: "RECEIPT" | "CHECKOUT" | "RETURN_USAGE" | "DISCARD" | "MOVE"
+// Role is now a real table (below) rather than a string field. The 3 built-in roles
+// (ADMIN, FORMULATOR, DIRECTOR) are seeded with isSystem: true.
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String @id @default(cuid())
+  key         String @unique
+  description String?
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model User {
+  id          String    @id @default(cuid())
+  adUsername  String    @unique
+  name        String
+  roleId      String
+  // SQL Server's sqlserver connector doesn't support `Restrict` (only NoAction, Cascade,
+  // SetNull, SetDefault are valid referential actions there) — using NoAction like every
+  // other FK to User/Sample in this schema, for the same multi-cascade-path reason.
+  role        Role      @relation(fields: [roleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  samplesCreated  Sample[]          @relation("CreatedBy")
+  samplesDiscarded Sample[]         @relation("DiscardedBy")
+  requestsMade    SampleRequest[]   @relation("RequestedBy")
+  requestsApproved SampleRequest[]  @relation("ApprovedBy")
+  ordersMade      SampleOrder[]     @relation("OrderedBy")
+  ordersApproved  SampleOrder[]     @relation("OrderApprovedBy")
+  feedbackGiven   Feedback[]        @relation("SubmittedBy")
+  transactions    Transaction[]     @relation("PerformedBy")
+  locationMoves   LocationHistory[] @relation("MovedBy")
+  piecesHeld      SamplePiece[]     @relation("CheckedOutTo")
+  piecesDiscarded SamplePiece[]     @relation("PieceDiscardedBy")
+  transactionsAbout Transaction[]   @relation("TransactionSubject")
+  savedViews      SavedTableView[]
+
+  @@map("users")
+}
+
+// A user's saved column layout for one table. Stored per user rather than per browser so
+// the layout follows someone from their desk to a shelf-floor tablet — the same reason
+// menu settings live in the DB. `columns` is the column keys, comma-joined, in the
+// picker's own order; unknown keys are simply dropped when the table resolves them, so a
+// renamed column degrades to "missing" rather than breaking the view.
+model SavedTableView {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tableKey  String
+  columns   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, tableKey])
+  @@map("saved_table_views")
+}
+
+// Admin-managed reference lists. These supply the fixed value lists for the Add Sample
+// form's Function / Physical Form dropdowns (held in SLT-13 pending exactly these) and
+// for Supplier.
+//
+// Sample stores the chosen *name* as a string rather than a foreign key, so these tables
+// can be introduced without migrating existing sample rows. The trade-off: renaming an
+// entry here does not retroactively update samples that already reference the old name.
+// Converting Sample.function / .physicalForm / .supplier to real FKs is a separate,
+// data-affecting migration — worth doing, but deliberately not bundled in here.
+model SampleFunction {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("sample_functions")
+}
+
+model PhysicalForm {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("physical_forms")
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("projects")
+}
+
+model ChemicalFamily {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("chemical_families")
+}
+
+model RegulatoryFunction {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("regulatory_functions")
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("suppliers")
+}
+
+// The master INCI/compliance record. Samples link to this by foreign key (via
+// SampleIngredient), so edits here surface everywhere the ingredient is referenced
+// without touching the samples themselves.
+//
+// Tri-state regulatory fields (Endocrine Disruptor, CMR) use a string rather than a
+// nullable boolean because "Not Available" is a real, asserted answer from a compliance
+// dossier — meaningfully different from "nobody has filled this in yet", which is null.
+// Plain Yes/No fields stay nullable booleans, where null is simply "not recorded".
+model IngredientListEntry {
+  id             String   @id @default(cuid())
+  // INCI#### , assigned on create. Nullable only so the column could be added to
+  // existing rows before backfilling; every row written by the app sets it.
+  uid            String?  @unique
+  inciName       String
+  chemicalFamily String?
+
+  molecularFormula String?
+  molecularWeight  String? // free text: supports ranges and notation, e.g. "358.56 g/mol"
+  regulatoryFunction String?
+
+  // One INCI name can legitimately map to several CAS numbers, so they're separate rows
+  // rather than a delimited string — keeps each value searchable on its own.
+  casNumbers IngredientCasNumber[]
+
+  euRegulation Boolean? // shown green for yes, red for no
+  euAnnex      String? // "No", or the annex reference
+  restriction  String? // "No", or the restriction text
+  euOpinion    String? // yes / no / free text
+
+  chinaListed Boolean?
+
+  endocrineDisruptor String? // YES | NO | NA
+  cmr                String? // YES | NO | NA
+
+  dermalAbsorption String? // DAP
+  noael            String? // mg/kg bw/day
+
+  biodegradability String? // NOT_BIODEGRADABLE | READILY_BIODEGRADABLE | NOT_APPLICABLE
+  pbt              Boolean?
+  aquaticToxicity  Boolean?
+  aquaticHazardStatements String? // e.g. "H411"
+
+  yukaRating       Int? // 1-5
+  inciBeautyRating Int? // 1-5
+  beeslineRating   Int? // 1-5
+
+  comments String? @db.NVarChar(Max)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sampleLinks SampleIngredient[]
+
+  @@index([inciName])
+  @@index([chemicalFamily])
+  @@map("ingredient_list_entries")
+}
+
+model Sample {
+  id            String    @id @default(cuid())
+  sampleCode    String    @unique
+  rmName        String
+  function      String
+  category      String
+  subcategory1  String?
+  subcategory2  String?
+  physicalForm  String
+  source        String
+  supplier      String
+  expiryDate    DateTime
+  // Ever-increasing historical total of everything ever received. Deliberately NOT the
+  // current stock — that's computed from SamplePiece (SLT-29). Set at creation, added to
+  // by restocks.
+  totalQtyG     Decimal   @db.Decimal(10, 2)
+  shelfLetter   String
+  shelfLevel    Int
+  receptionDate DateTime  @default(now())
+
+  // Added after the first samples existed, so these are nullable in the database even
+  // where the form requires them — existing rows predate the fields and keep null until
+  // someone edits them.
+  fragranceOrientation String? // the 13 sub-values under Category = Fragrance
+  receivedQtyPcs       Int?
+  netWeightG           Decimal? @db.Decimal(10, 2)
+  shelfSublevel        String? // letter suffix on the level, e.g. "1a"
+  hazardClass          String? // Hazardous | Non-Hazardous
+  projectName          String?
+  batchLot             String?
+  documentAvailability String? // YES | NO
+  isDiscarded   Boolean   @default(false)
+  discardReason String?
+  discardedAt   DateTime?
+  discardedById String?
+  discardedBy   User?     @relation("DiscardedBy", fields: [discardedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  createdById String
+  createdBy   User     @relation("CreatedBy", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ingredients     SampleIngredient[]
+  locationHistory LocationHistory[]
+  pieces          SamplePiece[]
+  transactions    Transaction[]
+  requests        SampleRequest[]
+  feedback        Feedback[]
+  orderReceipts   SampleOrder[]
+
+  @@index([category, subcategory1, subcategory2])
+  @@map("samples")
+}
+
+// One row per physical piece received. A piece is the unit of custody and consumption:
+// it's checked out to one formulator at a time (SLT-56) and loses weight only when an
+// Admin logs actual usage against it (SLT-29).
+//
+// originalWeightG is immutable — what the piece weighed on arrival. remainingWeightG is
+// what's left of it. The sample's current stock is derived from these rows and never
+// stored (see sampleStock() in src/lib/stock.ts), so no code path can desync a total
+// from the pieces it's supposed to summarise.
+model SamplePiece {
+  id                 String    @id @default(cuid())
+  sampleId           String
+  sample             Sample    @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  pieceIndex         Int
+  originalWeightG    Decimal   @db.Decimal(10, 2)
+  remainingWeightG   Decimal   @db.Decimal(10, 2)
+  // IN_STOCK | CHECKED_OUT | DEPLETED | DISCARDED — see PIECE_STATUSES in src/lib/stock.ts.
+  status             String    @default("IN_STOCK")
+  // Current custody only. Past checkouts are history and live in Transaction, which is
+  // why this is a plain nullable FK rather than its own table — a piece can be with at
+  // most one person at a time.
+  checkedOutToUserId String?
+  checkedOutToUser   User?     @relation("CheckedOutTo", fields: [checkedOutToUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  checkedOutAt       DateTime?
+  // Set together when a piece is discarded (SLT-55). Discarding is per piece and does not
+  // touch Sample.isDiscarded — a sample whose pieces are all gone simply reads 0 stock,
+  // with the pieces still listed in its history.
+  discardReason      String?
+  discardedAt        DateTime?
+  discardedById      String?
+  discardedBy        User?     @relation("PieceDiscardedBy", fields: [discardedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  createdAt          DateTime  @default(now())
+
+  transactions       Transaction[]
+
+  @@unique([sampleId, pieceIndex])
+  @@index([sampleId, status])
+  @@map("sample_pieces")
+}
+
+model SampleIngredient {
+  sampleId     String
+  ingredientId String
+  sample       Sample               @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  ingredient   IngredientListEntry  @relation(fields: [ingredientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([sampleId, ingredientId])
+  @@map("sample_ingredients")
+}
+
+model LocationHistory {
+  id            String  @id @default(cuid())
+  sampleId      String
+  sample        Sample  @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  shelfLetter   String
+  shelfLevel    Int
+  shelfSublevel String?
+  movedAt     DateTime @default(now())
+  movedById   String?
+  movedBy     User?    @relation("MovedBy", fields: [movedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  note        String?
+
+  @@map("location_history")
+}
+
+// Swappable shelf-slot lookup table (SLT-19), seeded from the pixel-verified shelf plan
+// in category_shelf_mapping_final.md. Queried at runtime rather than hardcoded so the
+// A-E band split can be corrected with a data change instead of a deploy - it has
+// already moved once (Chemicals A-C / Natural D-E became Chemicals A-B / Natural C-E)
+// and is still an open item with Rawan.
+//
+// Keys are applied in the order resolveShelfSlot() applies them: Source first - Natural
+// and Organic each claim a zone outright, whatever the Category - then Category, and for
+// Fragrance the Orientation in place of the Category. A null key is a wildcard, which is
+// how the Natural and Organic rows match every Category.
+//
+// A row's target is one of three shapes:
+//   fixed cell     letter + level                    (e.g. Woody -> I1)
+//   letter band    letterRangeStart-End              (e.g. Natural -> C-E, level manual)
+//   level band     letter + levelRangeStart-End      (e.g. Colorant -> G4-G5)
+model ShelfSlotConfig {
+  id                   String  @id @default(cuid())
+  source               String
+  category             String?
+  fragranceOrientation String?
+  letter               String?
+  level                Int?
+  letterRangeStart     String?
+  letterRangeEnd       String?
+  levelRangeStart      Int?
+  levelRangeEnd        Int?
+  isManualLevel        Boolean @default(false)
+  colorHex             String
+
+  @@unique([source, category, fragranceOrientation])
+  @@map("shelf_slot_configs")
+}
+
+model IngredientCasNumber {
+  id           String              @id @default(cuid())
+  ingredientId String
+  ingredient   IngredientListEntry @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  value        String
+
+  @@index([ingredientId])
+  @@index([value])
+  @@map("ingredient_cas_numbers")
+}
+
+// Single-row counter behind the INCI#### ingredient UIDs. Separate from the sample
+// sequence because ingredient codes aren't year-scoped.
+model IngredientCodeSequence {
+  id        String @id @default("INCI")
+  lastValue Int    @default(0)
+
+  @@map("ingredient_code_sequences")
+}
+
+model SampleCodeSequence {
+  year      Int @id
+  lastValue Int @default(0)
+
+  @@map("sample_code_sequences")
+}
+
+model SampleRequest {
+  id            String        @id @default(cuid())
+  sampleId      String
+  sample        Sample        @relation(fields: [sampleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  requestedById String
+  requestedBy   User          @relation("RequestedBy", fields: [requestedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  amountG       Decimal       @db.Decimal(10, 2)
+  purpose       String
+  status        String        @default("PENDING")
+  approvedById  String?
+  approvedBy    User?         @relation("ApprovedBy", fields: [approvedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  decidedAt     DateTime?
+  actualUsageG  Decimal?      @db.Decimal(10, 2)
+  createdAt     DateTime      @default(now())
+
+  transactions Transaction[]
+  feedback    Feedback?
+
+  @@map("sample_requests")
+}
+
+model SampleOrder {
+  id                String       @id @default(cuid())
+  existingSampleId  String?
+  existingSample    Sample?      @relation(fields: [existingSampleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  newRmName         String?
+  newRmDetails      String?
+
+  supplier     String
+  orderedById  String
+  orderedBy    User        @relation("OrderedBy", fields: [orderedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status       String      @default("PENDING")
+  prNumber     String?
+  approvedById String?
+  approvedBy   User?       @relation("OrderApprovedBy", fields: [approvedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  decidedAt    DateTime?
+  receivedAt   DateTime?
+  createdAt    DateTime    @default(now())
+
+  @@map("sample_orders")
+}
+
+model Feedback {
+  id            String         @id @default(cuid())
+  sampleId      String
+  sample        Sample         @relation(fields: [sampleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  submittedById String
+  submittedBy   User           @relation("SubmittedBy", fields: [submittedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  requestId     String?        @unique
+  request       SampleRequest? @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reportText    String
+  createdAt     DateTime       @default(now())
+
+  @@map("feedback")
+}
+
+model Transaction {
+  id            String          @id @default(cuid())
+  sampleId      String
+  sample        Sample          @relation(fields: [sampleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  type          String
+  quantityG     Decimal?        @db.Decimal(10, 2)
+  // Who RECORDED the movement — always an Admin. Distinct from subjectUser below.
+  performedById String
+  performedBy   User            @relation("PerformedBy", fields: [performedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // Who the movement is ABOUT: the formulator a piece went to or came back from. Without
+  // this, the only record of custody is the note text, and "what was checked out to me"
+  // (SLT-57) can't be answered without string-matching names.
+  subjectUserId String?
+  subjectUser   User?           @relation("TransactionSubject", fields: [subjectUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // Which physical piece moved, for the piece-level types (CHECKOUT, RETURN_USAGE,
+  // DISCARD, RECEIPT). Null for sample-wide entries.
+  pieceId       String?
+  piece         SamplePiece?    @relation(fields: [pieceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // Deliberately NOT @unique. SQL Server treats NULLs as equal in a UNIQUE constraint, so
+  // marking this nullable column unique caps the whole table at ONE request-less
+  // transaction — and CHECKOUT/RETURN_USAGE rows (SLT-56/SLT-29) never have a request, so
+  // the second one ever written would fail. One-transaction-per-request is enforced in
+  // application code instead, when that flow is built; expressing it in the database
+  // needs a filtered unique index (WHERE requestId IS NOT NULL), which Prisma's schema
+  // language can't declare.
+  requestId     String?
+  request       SampleRequest?  @relation(fields: [requestId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  note          String?
+  createdAt     DateTime        @default(now())
+
+  @@index([sampleId, createdAt])
+  @@index([requestId])
+  @@index([subjectUserId, type])
+  @@map("transactions")
+}
+
+model MenuSetting {
+  id       String  @id @default(cuid())
+  navKey   String
+  role     String
+  isHidden Boolean @default(false)
+
+  @@unique([navKey, role])
+  @@map("menu_settings")
+}
