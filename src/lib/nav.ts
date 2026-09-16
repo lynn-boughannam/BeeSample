@@ -21,6 +21,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "orders", label: "New Sample Orders", href: "/orders", roles: ["ADMIN", "FORMULATOR"] },
   { key: "pending-feedback", label: "Pending Feedback", href: "/pending-feedback", roles: ["ADMIN"] },
   { key: "feedback", label: "Sample Feedback", href: "/feedback", roles: ["ADMIN", "FORMULATOR"] },
+  { key: "reports", label: "Reports", href: "/reports", roles: ["ADMIN"] },
   { key: "lists", label: "Reference Lists", href: "/settings/lists", roles: ["ADMIN"] },
   { key: "users", label: "User Settings", href: "/settings/users", roles: ["ADMIN"] },
   { key: "menu-settings", label: "Menu Settings", href: "/settings/menu", roles: ["ADMIN"], pinned: true },
