@@ -25,7 +25,7 @@ export default async function NewOrderPage() {
         function: true,
         supplier: true,
         projectName: true,
-        ingredients: { select: { ingredient: { select: { inciName: true } } } },
+        ingredients: { select: { ingredient: { select: { id: true, inciName: true } } } },
       },
       orderBy: { sampleCode: "asc" },
     }),
@@ -45,7 +45,8 @@ export default async function NewOrderPage() {
     id: s.id,
     sampleCode: s.sampleCode,
     rmName: s.rmName,
-    inciNames: s.ingredients.map((i) => i.ingredient.inciName),
+    // Carried with their ids so the form can link each INCI back to its record.
+    ingredients: s.ingredients.map((i) => ({ id: i.ingredient.id, inciName: i.ingredient.inciName })),
     physicalForm: s.physicalForm,
     category: s.category,
     source: s.source,

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select, Textarea } from "@/components/ui/input";
 import {
@@ -28,7 +28,7 @@ export type SampleOption = {
   id: string;
   sampleCode: string;
   rmName: string;
-  inciNames: string[];
+  ingredients: Array<{ id: string; inciName: string }>;
   physicalForm: string;
   category: string;
   source: string;
@@ -63,6 +63,7 @@ export function OrderForm({
 
   const [requestType, setRequestType] = useState<OrderRequestType>("NEW");
   const [sampleId, setSampleId] = useState("");
+  const [sampleSearch, setSampleSearch] = useState("");
 
   // Pre-filled fields are held in state so they can be populated on selection and still be
   // edited afterwards — the request records what was asked for, not a live pointer at the
@@ -107,6 +108,7 @@ export function OrderForm({
   function handleTypeChange(next: OrderRequestType) {
     setRequestType(next);
     setSampleId("");
+    setSampleSearch("");
     // A brand-new material starts from nothing (AC1), and switching away from an existing
     // sample shouldn't leave that sample's details behind.
     clearPrefill();
@@ -121,7 +123,7 @@ export function OrderForm({
       return;
     }
     setPrefilled({
-      inciName: sample.inciNames.join(", "),
+      inciName: sample.ingredients.map((i) => i.inciName).join(", "),
       physicalForm: sample.physicalForm,
       category: sample.category,
       source: sample.source,
@@ -162,6 +164,22 @@ export function OrderForm({
   }
 
   const supplierCount = filledSupplierCount([supplier1, supplier2, supplier3]);
+
+  const selectedSample = samples.find((s) => s.id === sampleId) ?? null;
+
+  // INCI is searchable too: "which sample has Limonene in it" is a routine question, and
+  // the ingredient isn't otherwise visible in the row.
+  const filteredSamples = useMemo(() => {
+    const q = sampleSearch.trim().toLowerCase();
+    if (!q) return samples;
+    return samples.filter(
+      (s) =>
+        s.sampleCode.toLowerCase().includes(q) ||
+        s.rmName.toLowerCase().includes(q) ||
+        s.supplier.toLowerCase().includes(q) ||
+        s.ingredients.some((i) => i.inciName.toLowerCase().includes(q))
+    );
+  }, [samples, sampleSearch]);
 
   return (
     <form ref={formRef} action={formAction} onSubmit={handleSubmit} className="space-y-6">
@@ -216,23 +234,64 @@ export function OrderForm({
         </div>
 
         {showsSamplePicker && (
-          <div className="mt-4 max-w-md">
-            <FormField label="Sample" htmlFor="existingSampleId" error={errors.existingSampleId}>
-              <Select
-                id="existingSampleId"
-                name="existingSampleId"
-                value={sampleId}
+          <div className="mt-4 max-w-xl">
+            {/* Posted separately from the list, which uses radios rather than a <select>:
+                the library runs to thousands of samples and a native dropdown can't be
+                typed into. Same filter-then-pick shape as the ingredient picker. */}
+            <input type="hidden" name="existingSampleId" value={sampleId} />
+
+            <FormField
+              label="Find the sample"
+              htmlFor="sampleSearch"
+              error={errors.existingSampleId}
+            >
+              <Input
+                id="sampleSearch"
+                type="search"
+                value={sampleSearch}
+                placeholder="Search by code, name, supplier or INCI"
                 invalid={Boolean(errors.existingSampleId)}
-                onChange={(e) => handleSampleChange(e.target.value)}
-              >
-                <option value="">Select a sample…</option>
-                {samples.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.sampleCode} · {s.rmName}
-                  </option>
-                ))}
-              </Select>
+                onChange={(e) => setSampleSearch(e.target.value)}
+              />
             </FormField>
+
+            {selectedSample && (
+              <p className="text-caption mt-2 rounded-md border border-success/40 bg-success/10 px-3 py-2 text-on-success">
+                Selected: {selectedSample.sampleCode} · {selectedSample.rmName}
+              </p>
+            )}
+
+            <ul className="mt-2 max-h-56 divide-y divide-neutral-dark/8 overflow-y-auto rounded-md border border-neutral-dark/15">
+              {filteredSamples.length === 0 ? (
+                <li className="text-body px-4 py-6 text-center text-neutral-dark/50">
+                  No samples match &ldquo;{sampleSearch}&rdquo;.
+                </li>
+              ) : (
+                filteredSamples.map((s) => (
+                  <li key={s.id}>
+                    <label className="flex cursor-pointer items-baseline gap-3 px-3 py-2 transition-colors duration-150 hover:bg-neutral-dark/[0.03]">
+                      <input
+                        type="radio"
+                        name="samplePick"
+                        checked={sampleId === s.id}
+                        onChange={() => handleSampleChange(s.id)}
+                        className="accent-brand-secondary"
+                      />
+                      <span className="text-body font-medium text-neutral-dark">
+                        {s.sampleCode}
+                      </span>
+                      <span className="text-body text-neutral-dark/80">{s.rmName}</span>
+                      <span className="text-caption ml-auto text-neutral-dark/50">
+                        {s.supplier}
+                      </span>
+                    </label>
+                  </li>
+                ))
+              )}
+            </ul>
+            <p className="text-caption mt-1 text-neutral-dark/50">
+              Showing {filteredSamples.length} of {samples.length}.
+            </p>
           </div>
         )}
       </section>
@@ -252,6 +311,24 @@ export function OrderForm({
               value={prefilled.inciName}
               onChange={(e) => setPrefilledField("inciName", e.target.value)}
             />
+            {/* Stays a free-text box because a brand-new material may have no ingredient
+                record yet. When it came from a sample, each INCI links to its record so
+                the requester can check what they're asking for. */}
+            {selectedSample && selectedSample.ingredients.length > 0 && (
+              <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span className="text-caption text-neutral-dark/50">In the list:</span>
+                {selectedSample.ingredients.map((i) => (
+                  <Link
+                    key={i.id}
+                    href={`/ingredients/${i.id}`}
+                    target="_blank"
+                    className="text-caption rounded-full border border-neutral-dark/15 px-2 py-0.5 text-neutral-dark/80 transition-colors duration-150 hover:bg-neutral-dark/[0.04] hover:underline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-primary"
+                  >
+                    {i.inciName}
+                  </Link>
+                ))}
+              </span>
+            )}
           </FormField>
           <FormField label="Physical Form" htmlFor="physicalForm">
             <Select
