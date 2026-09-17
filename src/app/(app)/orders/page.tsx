@@ -116,6 +116,11 @@ export default async function OrdersPage({
               {order.shortSupplierListAcknowledged && (
                 <p className="text-caption mt-3 text-neutral-dark/55">
                   Submitted with fewer than 3 supplier options, confirmed by the requester.
+                  {order.shortSupplierListReason ? (
+                    <> Reason given: &ldquo;{order.shortSupplierListReason}&rdquo;</>
+                  ) : (
+                    <> No reason given.</>
+                  )}
                 </p>
               )}
             </li>

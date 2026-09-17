@@ -58,6 +58,22 @@ async function main() {
   check("an existing-sample type needs its sample",
     CreateSampleOrderSchema.safeParse({ requestType: "EXISTING_NEW_SOURCE", ...base }).success, false);
 
+  console.log("\n=== the short-list reason is optional, not a second gate ===");
+  check("acknowledging with no reason still validates",
+    CreateSampleOrderSchema.safeParse({
+      requestType: "NEW", ...base, shortSupplierListAcknowledged: true,
+    }).success, true);
+  check("a reason validates",
+    CreateSampleOrderSchema.safeParse({
+      requestType: "NEW", ...base, shortSupplierListAcknowledged: true,
+      shortSupplierListReason: "Only one approved source",
+    }).success, true);
+  const blankReason = CreateSampleOrderSchema.safeParse({
+    requestType: "NEW", ...base, shortSupplierListAcknowledged: true, shortSupplierListReason: "   ",
+  });
+  check("a whitespace-only reason becomes null, not an empty string",
+    blankReason.success ? String(blankReason.data.shortSupplierListReason) : "(invalid)", "null");
+
   console.log("\n=== AC5/AC6: the supplier nudge ===");
   check("0 of 3 on a new material nudges", needsShortSupplierListConfirmation("NEW", ["", "", ""]), true);
   check("1 of 3 nudges", needsShortSupplierListConfirmation("NEW", ["A", "", ""]), true);
@@ -80,6 +96,7 @@ async function main() {
       requestType: "NEW", inciName: PREFIX + "BRAND NEW", supplier1: "Acme",
       application: "Skincare", requiredQuantityG: "500",
       directorApprovalConfirmed: true, shortSupplierListAcknowledged: true,
+      shortSupplierListReason: "Sole supplier for this material",
       orderedById: admin.id,
     },
   });
@@ -102,6 +119,11 @@ async function main() {
     check("submission date recorded", byId(newReq.id).createdAt >= before, true);
     check("attestation stored, not just enforced", byId(newReq.id).directorApprovalConfirmed, true);
     check("short-list acknowledgement stored", byId(newReq.id).shortSupplierListAcknowledged, true);
+    check("the reason given is stored alongside it",
+      byId(newReq.id).shortSupplierListReason, "Sole supplier for this material");
+    // The reason explains an acknowledgement, so it has no meaning without one.
+    check("a repeat order carries no short-list reason",
+      byId(repeat.id).shortSupplierListReason, "null");
     check("a repeat order keeps its supplier", byId(repeat.id).supplierName, sample.supplier);
     check("a repeat order links its sample", byId(repeat.id).existingSampleId, sample.id);
 
@@ -116,6 +138,14 @@ async function main() {
     check("supplier prompt present", /SHORT_SUPPLIER_LIST_PROMPT/.test(form), true);
     check('confirm button says "Yes, confirmed"', /Yes, confirmed/.test(form), true);
     check("attestation only posted once confirmed", /attested && <input type="hidden" name="directorApprovalConfirmed"/.test(form), true);
+    check("the prompt asks for a reason", /reasonLabel="Why fewer than 3\? \(optional\)"/.test(form), true);
+    // The dialog unmounts on confirm, so the value has to live outside it.
+    check("the reason is posted from outside the dialog",
+      /name="shortSupplierListReason" value=\{shortListReason\}/.test(form), true);
+
+    const ordersPage = readFileSync("src/app/(app)/orders/page.tsx", "utf8");
+    check("the reason is shown on the list", /shortSupplierListReason/.test(ordersPage), true);
+    check("a missing reason is called out rather than hidden", /No reason given/.test(ordersPage), true);
 
     const action = readFileSync("src/app/(app)/orders/actions.ts", "utf8");
     check("server re-checks the nudge", /needsShortSupplierListConfirmation/.test(action), true);

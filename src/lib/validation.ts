@@ -297,6 +297,8 @@ export const CreateSampleOrderSchema = z
     // The form posts these only once the requester has actually confirmed.
     directorApprovalConfirmed: z.coerce.boolean(),
     shortSupplierListAcknowledged: z.coerce.boolean().optional(),
+    // Optional by design: the acknowledgement is the gate, the reason is the context.
+    shortSupplierListReason: orderText,
   })
   // AC4: nothing saves without the attestation, whatever the type.
   .refine((v) => v.directorApprovalConfirmed, {

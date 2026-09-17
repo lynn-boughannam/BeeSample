@@ -88,6 +88,7 @@ export function OrderForm({
   const [showSupplierPrompt, setShowSupplierPrompt] = useState(false);
   const [attested, setAttested] = useState(false);
   const [acknowledgedShortList, setAcknowledgedShortList] = useState(false);
+  const [shortListReason, setShortListReason] = useState("");
 
   const errors = state?.fieldErrors ?? {};
   const showsSamplePicker = needsExistingSample(requestType);
@@ -113,6 +114,7 @@ export function OrderForm({
     // sample shouldn't leave that sample's details behind.
     clearPrefill();
     setAcknowledgedShortList(false);
+    setShortListReason("");
   }
 
   function handleSampleChange(id: string) {
@@ -187,7 +189,12 @@ export function OrderForm({
       {/* Only ever posted once the requester has actually confirmed in the dialog. */}
       {attested && <input type="hidden" name="directorApprovalConfirmed" value="on" />}
       {acknowledgedShortList && (
-        <input type="hidden" name="shortSupplierListAcknowledged" value="on" />
+        <>
+          <input type="hidden" name="shortSupplierListAcknowledged" value="on" />
+          {/* Carried outside the dialog, which unmounts on confirm — an input living
+              inside it would be gone by the time the form submits. */}
+          <input type="hidden" name="shortSupplierListReason" value={shortListReason} />
+        </>
       )}
 
       {state?.formError && (
@@ -527,6 +534,10 @@ export function OrderForm({
           body={SHORT_SUPPLIER_LIST_PROMPT}
           detail={`You have provided ${supplierCount} of 3.`}
           confirmLabel="Yes, confirmed"
+          reasonLabel="Why fewer than 3? (optional)"
+          reasonPlaceholder="e.g. sole supplier for this material, or urgent trial"
+          reasonValue={shortListReason}
+          onReasonChange={setShortListReason}
           onConfirm={() => confirmAndSubmit(setAcknowledgedShortList)}
           onCancel={() => setShowSupplierPrompt(false)}
         />
@@ -550,6 +561,10 @@ function Dialog({
   body,
   detail,
   confirmLabel,
+  reasonLabel,
+  reasonPlaceholder,
+  reasonValue,
+  onReasonChange,
   onConfirm,
   onCancel,
 }: {
@@ -557,6 +572,13 @@ function Dialog({
   body: string;
   detail?: string;
   confirmLabel: string;
+  // Optional: only the supplier prompt asks for an explanation. Left optional rather than
+  // required because the acknowledgement is the gate — this is the context procurement
+  // would otherwise have to chase by email.
+  reasonLabel?: string;
+  reasonPlaceholder?: string;
+  reasonValue?: string;
+  onReasonChange?: (value: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -571,6 +593,20 @@ function Dialog({
         <h3 className="text-section-header text-neutral-dark">{title}</h3>
         <p className="text-body mt-2 text-neutral-dark/80">{body}</p>
         {detail && <p className="text-caption mt-1 text-neutral-dark/55">{detail}</p>}
+        {reasonLabel && onReasonChange && (
+          <div className="mt-3">
+            <FormField label={reasonLabel} htmlFor="shortListReason">
+              <Textarea
+                id="shortListReason"
+                rows={2}
+                autoFocus
+                value={reasonValue ?? ""}
+                placeholder={reasonPlaceholder}
+                onChange={(e) => onReasonChange(e.target.value)}
+              />
+            </FormField>
+          </div>
+        )}
         <div className="mt-4 flex flex-wrap justify-end gap-3">
           <Button type="button" variant="secondary" onClick={onCancel}>
             Go back

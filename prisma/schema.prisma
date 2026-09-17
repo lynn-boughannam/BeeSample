@@ -467,6 +467,10 @@ model SampleOrder {
   // ever existed as a dialog the requester clicked past.
   directorApprovalConfirmed   Boolean @default(false)
   shortSupplierListAcknowledged Boolean @default(false)
+  // Why fewer than three options were given — sole supplier, urgency, nothing else on the
+  // market. Optional: the acknowledgement is the gate, this is the explanation procurement
+  // would otherwise have to chase.
+  shortSupplierListReason     String?
 
   // Submission date and responsible user, both set by the server (AC7).
   orderedById String

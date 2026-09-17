@@ -52,6 +52,7 @@ export async function createSampleOrder(
     supplier3: text(formData, "supplier3"),
     directorApprovalConfirmed: formData.get("directorApprovalConfirmed") === "on",
     shortSupplierListAcknowledged: formData.get("shortSupplierListAcknowledged") === "on",
+    shortSupplierListReason: text(formData, "shortSupplierListReason"),
   });
 
   if (!parsed.success) return { fieldErrors: fieldErrorsFrom(parsed.error.issues) };
@@ -119,6 +120,12 @@ export async function createSampleOrder(
 
         directorApprovalConfirmed: true,
         shortSupplierListAcknowledged: Boolean(data.shortSupplierListAcknowledged),
+        // Only meaningful alongside the acknowledgement it explains, and only on a
+        // new-material request — the other types never see the prompt.
+        shortSupplierListReason:
+          isNew && data.shortSupplierListAcknowledged
+            ? (data.shortSupplierListReason ?? null)
+            : null,
 
         // AC7: both taken from the server, never from the form.
         orderedById: session.user.id,
