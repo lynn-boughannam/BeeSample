@@ -6,6 +6,7 @@ import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { CreateSampleOrderSchema } from "@/lib/validation";
 import { needsExistingSample, needsShortSupplierListConfirmation } from "@/lib/orders";
+import { nextIngredientCode } from "@/lib/ingredient-code";
 
 export type OrderFormState =
   | { fieldErrors?: Record<string, string>; formError?: string }
@@ -87,6 +88,42 @@ export async function createSampleOrder(
         ).map((i) => i.id)
       : [];
 
+  // INCI typed into "Other INCI not in the list" becomes a real record, so the request
+  // links to something rather than restating a name as text. A stub carries only the name,
+  // which is exactly what isIncomplete() flags (SLT-18) — it lands in the Ingredient List
+  // already marked as needing its safety data, rather than looking finished.
+  //
+  // Names are matched against the list first: the database collation is case-insensitive,
+  // so "limonene" finds "Limonene" and no duplicate is made.
+  const typedNames = (data.inciName ?? "")
+    .split(",")
+    .map((n) => n.trim())
+    .filter(Boolean);
+
+  const typedIds: string[] = [];
+  for (const name of typedNames) {
+    const existing = await prisma.ingredientListEntry.findFirst({
+      where: { inciName: name },
+      select: { id: true },
+    });
+    if (existing) {
+      typedIds.push(existing.id);
+      continue;
+    }
+    try {
+      const created = await prisma.ingredientListEntry.create({
+        data: { uid: await nextIngredientCode(), inciName: name },
+        select: { id: true },
+      });
+      typedIds.push(created.id);
+    } catch (error) {
+      console.error("createSampleOrder: could not add INCI to the list", name, error);
+      return {
+        fieldErrors: { inciName: `Could not add "${name}" to the ingredient list. Try again.` },
+      };
+    }
+  }
+
   // The sample has to exist and still be in the library — a request pointing at a deleted
   // row would be unactionable for procurement.
   let existingSampleId: string | null = null;
@@ -111,7 +148,8 @@ export async function createSampleOrder(
         requestType: data.requestType,
         existingSampleId,
 
-        inciName: data.inciName ?? null,
+        // Cleared: every typed name is now one of the links above.
+        inciName: null,
         physicalForm: data.physicalForm ?? null,
         category: data.category ?? null,
         source: data.source ?? null,
@@ -143,7 +181,12 @@ export async function createSampleOrder(
         // AC7: both taken from the server, never from the form.
         orderedById: session.user.id,
 
-        ingredients: { create: ingredientIds.map((id) => ({ ingredientId: id })) },
+        // Deduplicated: a name might be typed that was also ticked in the picker.
+        ingredients: {
+          create: [...new Set([...ingredientIds, ...typedIds])].map((id) => ({
+            ingredientId: id,
+          })),
+        },
       },
     });
   } catch (error) {

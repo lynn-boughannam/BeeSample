@@ -419,17 +419,27 @@ export function OrderForm({
             </div>
 
             {/* A brand-new material can be requested before anyone has added its INCI to
-                the master list, so there has to be somewhere to name those. */}
+                the master list. Rather than keeping those as loose text, submitting adds
+                them to the list so the request links to real records like any other. */}
             <div className="mt-3">
-              <FormField label="Other INCI not in the list" htmlFor="inciName">
+              <FormField
+                label="Other INCI not in the list"
+                htmlFor="inciName"
+                error={errors.inciName}
+              >
                 <Input
                   id="inciName"
                   name="inciName"
                   value={prefilled.inciName}
                   placeholder="Comma-separated, for anything not selectable above"
+                  invalid={Boolean(errors.inciName)}
                   onChange={(e) => setPrefilledField("inciName", e.target.value)}
                 />
               </FormField>
+              <p className="text-caption mt-1 text-neutral-dark/55">
+                These are added to the Ingredient List on submit and flagged as needing
+                their safety data. An INCI already in the list is reused, not duplicated.
+              </p>
             </div>
           </div>
           <FormField label="Physical Form" htmlFor="physicalForm">
