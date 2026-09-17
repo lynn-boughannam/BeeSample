@@ -274,6 +274,8 @@ export const CreateSampleOrderSchema = z
     requestType: z.enum(ORDER_REQUEST_TYPES, { error: "Choose a request type" }),
     existingSampleId: orderText,
 
+    // Chosen from the master list. Free-text inciName carries anything not in it yet.
+    ingredientIds: z.array(z.string().min(1)).default([]),
     inciName: orderText,
     physicalForm: orderText,
     category: orderText,

@@ -92,6 +92,8 @@ async function main() {
   console.log("\n=== AC7: saved records ===");
   const admin = await prisma.user.findFirstOrThrow({ where: { role: { name: "ADMIN" } } });
   const sample = await prisma.sample.findFirstOrThrow({ where: { isDiscarded: false } });
+  // Two real ingredients, so the multi-select link can be checked end to end.
+  const picked = await prisma.ingredientListEntry.findMany({ take: 2, orderBy: { inciName: "asc" } });
   const before = new Date();
 
   const newReq = await prisma.sampleOrder.create({
@@ -108,13 +110,18 @@ async function main() {
       requestType: "EXISTING_SAME_SOURCE", existingSampleId: sample.id,
       inciName: "prefilled inci", supplierName: sample.supplier, category: sample.category,
       directorApprovalConfirmed: true, orderedById: admin.id,
+      ingredients: { create: picked.map((i) => ({ ingredientId: i.id })) },
     },
   });
 
   try {
     const rows = await prisma.sampleOrder.findMany({
       where: { id: { in: [newReq.id, repeat.id] } },
-      include: { orderedBy: { select: { name: true } }, existingSample: { select: { sampleCode: true, rmName: true } } },
+      include: {
+        orderedBy: { select: { name: true } },
+        existingSample: { select: { sampleCode: true, rmName: true } },
+        ingredients: { include: { ingredient: { select: { inciName: true } } } },
+      },
     });
     const byId = (id: string) => rows.find((r) => r.id === id)!;
 
@@ -129,6 +136,15 @@ async function main() {
       byId(repeat.id).shortSupplierListReason, "null");
     check("a repeat order keeps its supplier", byId(repeat.id).supplierName, sample.supplier);
     check("a repeat order links its sample", byId(repeat.id).existingSampleId, sample.id);
+
+    console.log("\n=== INCI is chosen from the master list, not typed ===");
+    check("multiple INCI link to the request", byId(repeat.id).ingredients.length, picked.length);
+    check("linked names come from the ingredient records",
+      byId(repeat.id).ingredients.map((l) => l.ingredient.inciName).sort().join(", "),
+      picked.map((i) => i.inciName).sort().join(", "));
+    check("free text still available for INCI not in the list",
+      byId(repeat.id).inciName, "prefilled inci");
+    check("a request can have no linked INCI at all", byId(newReq.id).ingredients.length, 0);
 
     console.log("\n=== how a request is labelled ===");
     check("new material uses its INCI name", orderLabel(byId(newReq.id)), PREFIX + "BRAND NEW");
@@ -173,6 +189,19 @@ async function main() {
     // A call, not the word — the comment above it explains why verifySession is right.
     check("not admin-gated", /requireAdmin\(/.test(action), false);
 
+    check("the picker is a multi-select over the master list",
+      /type="checkbox"[\s\S]*checked=\{checkedInci\.has\(ing\.id\)\}/.test(form), true);
+    check("selected ids are posted, not names",
+      /name="ingredientIds" value=\{id\}/.test(form), true);
+    check("selections survive filtering the list",
+      /\[\.\.\.checkedInci\]\.map/.test(form), true);
+    check("picking a sample pre-ticks its ingredients",
+      /setCheckedInci\(new Set\(sample\.ingredients\.map/.test(form), true);
+    check("linked INCI is a column on the list",
+      /<TableHeaderCell>INCI<\/TableHeaderCell>/.test(ordersPage), true);
+    check("search reaches the linked ingredients",
+      /ingredients: \{ some: \{ ingredient: \{ inciName/.test(ordersPage), true);
+
     const newPage = readFileSync("src/app/(app)/orders/new/page.tsx", "utf8");
     check("supplier list built from Sample.supplier", /distinct: \["supplier"\]/.test(newPage), true);
 
@@ -180,6 +209,7 @@ async function main() {
     check("placeholder lists are flagged in code", /PLACEHOLDER VALUES/.test(lib), true);
     check("placeholder note is surfaced in the UI", /PLACEHOLDER_NOTE/.test(readFileSync("src/app/(app)/orders/page.tsx", "utf8")), true);
   } finally {
+    await prisma.sampleOrderIngredient.deleteMany({ where: { orderId: { in: [newReq.id, repeat.id] } } });
     await prisma.sampleOrder.deleteMany({ where: { id: { in: [newReq.id, repeat.id] } } });
     console.log("\ncleanup done");
     await prisma.$disconnect();

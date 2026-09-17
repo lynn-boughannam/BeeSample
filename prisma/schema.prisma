@@ -213,6 +213,7 @@ model IngredientListEntry {
   updatedAt      DateTime @updatedAt
 
   sampleLinks SampleIngredient[]
+  orderLinks  SampleOrderIngredient[]
 
   @@index([inciName])
   @@index([chemicalFamily])
@@ -438,6 +439,9 @@ model SampleOrder {
   // Pre-filled from the chosen sample on types 2 and 3, then editable. Stored as plain
   // values rather than read back through existingSample, so the record keeps what was
   // actually requested even if the sample is later edited.
+  // Free text, for INCI that isn't in the master list yet — a brand-new material can be
+  // requested before anyone has added its ingredients. Selections from the list live in
+  // `ingredients` below.
   inciName     String?
   physicalForm String?
   category     String?
@@ -485,9 +489,24 @@ model SampleOrder {
   decidedAt    DateTime?
   receivedAt   DateTime?
 
+  ingredients SampleOrderIngredient[]
+
   @@index([orderedById, createdAt])
   @@index([status])
   @@map("sample_orders")
+}
+
+// INCI chosen from the master list for a request. Mirrors SampleIngredient so an order and
+// a sample describe their composition the same way — and so the request links to real
+// ingredient records rather than restating names as text.
+model SampleOrderIngredient {
+  orderId      String
+  ingredientId String
+  order        SampleOrder         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ingredient   IngredientListEntry @relation(fields: [ingredientId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([orderId, ingredientId])
+  @@map("sample_order_ingredients")
 }
 
 model Feedback {

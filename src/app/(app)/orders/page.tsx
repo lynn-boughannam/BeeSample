@@ -76,6 +76,7 @@ export default async function OrdersPage({
             { orderedBy: { name: { contains: query } } },
             { existingSample: { sampleCode: { contains: query } } },
             { existingSample: { rmName: { contains: query } } },
+            { ingredients: { some: { ingredient: { inciName: { contains: query } } } } },
           ],
         }
       : {}),
@@ -87,6 +88,7 @@ export default async function OrdersPage({
       include: {
         orderedBy: { select: { name: true } },
         existingSample: { select: { id: true, sampleCode: true, rmName: true } },
+        ingredients: { include: { ingredient: { select: { id: true, inciName: true } } } },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -136,6 +138,7 @@ export default async function OrdersPage({
             <TableHeaderCell>Raised</TableHeaderCell>
             <TableHeaderCell>Request</TableHeaderCell>
             <TableHeaderCell>Type</TableHeaderCell>
+            <TableHeaderCell>INCI</TableHeaderCell>
             <TableHeaderCell>Supplier</TableHeaderCell>
             <TableHeaderCell className="text-right">Quantity</TableHeaderCell>
             <TableHeaderCell>Project</TableHeaderCell>
@@ -146,7 +149,7 @@ export default async function OrdersPage({
         <TableBody>
           {orders.length === 0 ? (
             <TableEmpty
-              colSpan={8}
+              colSpan={9}
               message={
                 totalCount === 0
                   ? "No requests yet. Raise one when you need a new material, a new source, or a repeat order."
@@ -172,6 +175,26 @@ export default async function OrdersPage({
                 <TableCell>
                   {ORDER_REQUEST_TYPE_LABELS[order.requestType as OrderRequestType] ??
                     order.requestType}
+                </TableCell>
+                <TableCell>
+                  {/* Linked records, so a name here always matches the ingredient it
+                      points at. Free-text INCI trails behind in brackets. */}
+                  <span className="flex flex-wrap items-baseline gap-x-1.5">
+                    {order.ingredients.map((link, i) => (
+                      <Link
+                        key={link.ingredient.id}
+                        href={`/ingredients/${link.ingredient.id}`}
+                        className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
+                      >
+                        {link.ingredient.inciName}
+                        {i < order.ingredients.length - 1 ? "," : ""}
+                      </Link>
+                    ))}
+                    {order.inciName && (
+                      <span className="text-neutral-dark/60">({order.inciName})</span>
+                    )}
+                    {order.ingredients.length === 0 && !order.inciName && dash}
+                  </span>
                 </TableCell>
                 <TableCell>
                   <SupplierCell order={order} />

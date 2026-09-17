@@ -10,7 +10,7 @@ import { createSampleOrder } from "../actions";
 export default async function NewOrderPage() {
   await verifySession();
 
-  const [samples, functions, physicalForms, projects, supplierRows] = await Promise.all([
+  const [samples, functions, physicalForms, projects, supplierRows, ingredients] = await Promise.all([
     // The live library is the catalogue for an "existing sample" request. Discarded
     // samples are excluded: re-ordering from a record we've retired is not the intent.
     prisma.sample.findMany({
@@ -38,6 +38,11 @@ export default async function NewOrderPage() {
       distinct: ["supplier"],
       select: { supplier: true },
       orderBy: { supplier: "asc" },
+    }),
+    // The INCI master list, so a request links to real ingredient records.
+    prisma.ingredientListEntry.findMany({
+      orderBy: { inciName: "asc" },
+      select: { id: true, inciName: true, chemicalFamily: true },
     }),
   ]);
 
@@ -70,6 +75,7 @@ export default async function NewOrderPage() {
 
       <OrderForm
         samples={options}
+        ingredients={ingredients}
         categories={SAMPLE_CATEGORIES}
         sources={SAMPLE_SOURCES}
         functions={functions.map((f) => f.name)}

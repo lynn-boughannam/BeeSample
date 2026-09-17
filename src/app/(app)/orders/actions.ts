@@ -33,6 +33,7 @@ export async function createSampleOrder(
   const parsed = CreateSampleOrderSchema.safeParse({
     requestType: text(formData, "requestType"),
     existingSampleId: text(formData, "existingSampleId"),
+    ingredientIds: formData.getAll("ingredientIds").map(String).filter(Boolean),
     inciName: text(formData, "inciName"),
     physicalForm: text(formData, "physicalForm"),
     category: text(formData, "category"),
@@ -73,6 +74,18 @@ export async function createSampleOrder(
       },
     };
   }
+
+  // Only ids that actually exist are linked: a stale form could name an ingredient
+  // someone deleted while the request was being filled in.
+  const ingredientIds =
+    data.ingredientIds.length > 0
+      ? (
+          await prisma.ingredientListEntry.findMany({
+            where: { id: { in: data.ingredientIds } },
+            select: { id: true },
+          })
+        ).map((i) => i.id)
+      : [];
 
   // The sample has to exist and still be in the library — a request pointing at a deleted
   // row would be unactionable for procurement.
@@ -129,6 +142,8 @@ export async function createSampleOrder(
 
         // AC7: both taken from the server, never from the form.
         orderedById: session.user.id,
+
+        ingredients: { create: ingredientIds.map((id) => ({ ingredientId: id })) },
       },
     });
   } catch (error) {

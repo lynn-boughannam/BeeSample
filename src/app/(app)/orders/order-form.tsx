@@ -39,6 +39,7 @@ export type SampleOption = {
 
 export function OrderForm({
   samples,
+  ingredients,
   categories,
   sources,
   functions,
@@ -48,6 +49,8 @@ export function OrderForm({
   action,
 }: {
   samples: SampleOption[];
+  // The INCI master list, picked from rather than typed (SLT-58 follow-up).
+  ingredients: Array<{ id: string; inciName: string; chemicalFamily: string | null }>;
   categories: readonly string[];
   sources: readonly string[];
   functions: string[];
@@ -64,6 +67,8 @@ export function OrderForm({
   const [requestType, setRequestType] = useState<OrderRequestType>("NEW");
   const [sampleId, setSampleId] = useState("");
   const [sampleSearch, setSampleSearch] = useState("");
+  const [inciSearch, setInciSearch] = useState("");
+  const [checkedInci, setCheckedInci] = useState<Set<string>>(new Set());
 
   // Pre-filled fields are held in state so they can be populated on selection and still be
   // edited afterwards — the request records what was asked for, not a live pointer at the
@@ -113,6 +118,7 @@ export function OrderForm({
     // A brand-new material starts from nothing (AC1), and switching away from an existing
     // sample shouldn't leave that sample's details behind.
     clearPrefill();
+    setCheckedInci(new Set());
     setAcknowledgedShortList(false);
     setShortListReason("");
   }
@@ -122,10 +128,15 @@ export function OrderForm({
     const sample = samples.find((s) => s.id === id);
     if (!sample) {
       clearPrefill();
+      setCheckedInci(new Set());
       return;
     }
+    // Pre-ticks the sample's ingredients rather than pasting their names as text, so the
+    // request links to the real records.
+    setCheckedInci(new Set(sample.ingredients.map((i) => i.id)));
     setPrefilled({
-      inciName: sample.ingredients.map((i) => i.inciName).join(", "),
+      // The picker carries what's in the master list; this stays for anything that isn't.
+      inciName: "",
       physicalForm: sample.physicalForm,
       category: sample.category,
       source: sample.source,
@@ -168,6 +179,29 @@ export function OrderForm({
   const supplierCount = filledSupplierCount([supplier1, supplier2, supplier3]);
 
   const selectedSample = samples.find((s) => s.id === sampleId) ?? null;
+
+  function toggleInci(id: string) {
+    setCheckedInci((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // Resolved from the master list rather than held alongside the ids, so a name can never
+  // drift from the record it points at.
+  const chosenInci = ingredients.filter((i) => checkedInci.has(i.id));
+
+  const filteredInci = useMemo(() => {
+    const q = inciSearch.trim().toLowerCase();
+    if (!q) return ingredients;
+    return ingredients.filter(
+      (i) =>
+        i.inciName.toLowerCase().includes(q) ||
+        (i.chemicalFamily ?? "").toLowerCase().includes(q)
+    );
+  }, [ingredients, inciSearch]);
 
   // INCI is searchable too: "which sample has Limonene in it" is a routine question, and
   // the ingredient isn't otherwise visible in the row.
@@ -313,20 +347,31 @@ export function OrderForm({
             : "Nothing is pre-filled for a brand-new material."}
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="INCI Name" htmlFor="inciName">
-            <Input
-              id="inciName"
-              name="inciName"
-              value={prefilled.inciName}
-              onChange={(e) => setPrefilledField("inciName", e.target.value)}
-            />
-            {/* Stays a free-text box because a brand-new material may have no ingredient
-                record yet. When it came from a sample, each INCI links to its record so
-                the requester can check what they're asking for. */}
-            {selectedSample && selectedSample.ingredients.length > 0 && (
-              <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <span className="text-caption text-neutral-dark/50">In the list:</span>
-                {selectedSample.ingredients.map((i) => (
+          {/* Picked from the master Ingredient List rather than typed, so a request links
+              to real records. Spans both columns — it's a list, not a one-line field. */}
+          <div className="sm:col-span-2">
+            <FormField label="INCI" htmlFor="inciSearch">
+              <Input
+                id="inciSearch"
+                type="search"
+                value={inciSearch}
+                placeholder="Filter the ingredient list by INCI name or chemical family"
+                onChange={(e) => setInciSearch(e.target.value)}
+              />
+            </FormField>
+
+            {/* One hidden field per selection: the ids are what get linked, and they have
+                to survive a filter that hides the row they came from. */}
+            {[...checkedInci].map((id) => (
+              <input key={id} type="hidden" name="ingredientIds" value={id} />
+            ))}
+
+            {chosenInci.length > 0 && (
+              <p className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-caption text-neutral-dark/50">
+                  {chosenInci.length} selected:
+                </span>
+                {chosenInci.map((i) => (
                   <Link
                     key={i.id}
                     href={`/ingredients/${i.id}`}
@@ -336,9 +381,57 @@ export function OrderForm({
                     {i.inciName}
                   </Link>
                 ))}
-              </span>
+              </p>
             )}
-          </FormField>
+
+            <div className="mt-2 max-h-52 overflow-y-auto rounded-md border border-neutral-dark/15">
+              {ingredients.length === 0 ? (
+                <p className="text-body px-4 py-6 text-center text-neutral-dark/50">
+                  No ingredients in the master list yet.
+                </p>
+              ) : filteredInci.length === 0 ? (
+                <p className="text-body px-4 py-6 text-center text-neutral-dark/50">
+                  No ingredients match &ldquo;{inciSearch}&rdquo;. Selections you already
+                  made are kept.
+                </p>
+              ) : (
+                <ul className="divide-y divide-neutral-dark/8">
+                  {filteredInci.map((ing) => (
+                    <li key={ing.id}>
+                      <label className="flex cursor-pointer items-center gap-3 px-4 py-2 transition-colors duration-150 hover:bg-neutral-dark/[0.02]">
+                        <input
+                          type="checkbox"
+                          checked={checkedInci.has(ing.id)}
+                          onChange={() => toggleInci(ing.id)}
+                          className="h-4 w-4 shrink-0 rounded border-neutral-dark/30"
+                        />
+                        <span className="text-body text-neutral-dark">{ing.inciName}</span>
+                        {ing.chemicalFamily && (
+                          <span className="text-caption ml-auto text-neutral-dark/50">
+                            {ing.chemicalFamily}
+                          </span>
+                        )}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* A brand-new material can be requested before anyone has added its INCI to
+                the master list, so there has to be somewhere to name those. */}
+            <div className="mt-3">
+              <FormField label="Other INCI not in the list" htmlFor="inciName">
+                <Input
+                  id="inciName"
+                  name="inciName"
+                  value={prefilled.inciName}
+                  placeholder="Comma-separated, for anything not selectable above"
+                  onChange={(e) => setPrefilledField("inciName", e.target.value)}
+                />
+              </FormField>
+            </div>
+          </div>
           <FormField label="Physical Form" htmlFor="physicalForm">
             <Select
               id="physicalForm"
