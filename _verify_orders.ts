@@ -58,21 +58,24 @@ async function main() {
   check("an existing-sample type needs its sample",
     CreateSampleOrderSchema.safeParse({ requestType: "EXISTING_NEW_SOURCE", ...base }).success, false);
 
-  console.log("\n=== the short-list reason is optional, not a second gate ===");
-  check("acknowledging with no reason still validates",
+  console.log("\n=== the short-list reason is required once acknowledged ===");
+  check("acknowledging with no reason is rejected",
     CreateSampleOrderSchema.safeParse({
       requestType: "NEW", ...base, shortSupplierListAcknowledged: true,
-    }).success, true);
-  check("a reason validates",
+    }).success, false);
+  check("a whitespace-only reason is rejected",
+    CreateSampleOrderSchema.safeParse({
+      requestType: "NEW", ...base, shortSupplierListAcknowledged: true,
+      shortSupplierListReason: "   ",
+    }).success, false);
+  check("a real reason passes",
     CreateSampleOrderSchema.safeParse({
       requestType: "NEW", ...base, shortSupplierListAcknowledged: true,
       shortSupplierListReason: "Only one approved source",
     }).success, true);
-  const blankReason = CreateSampleOrderSchema.safeParse({
-    requestType: "NEW", ...base, shortSupplierListAcknowledged: true, shortSupplierListReason: "   ",
-  });
-  check("a whitespace-only reason becomes null, not an empty string",
-    blankReason.success ? String(blankReason.data.shortSupplierListReason) : "(invalid)", "null");
+  // The requirement hangs off the acknowledgement, so a full supplier list is unaffected.
+  check("no acknowledgement means no reason needed",
+    CreateSampleOrderSchema.safeParse({ requestType: "NEW", ...base }).success, true);
 
   console.log("\n=== AC5/AC6: the supplier nudge ===");
   check("0 of 3 on a new material nudges", needsShortSupplierListConfirmation("NEW", ["", "", ""]), true);
@@ -138,14 +141,30 @@ async function main() {
     check("supplier prompt present", /SHORT_SUPPLIER_LIST_PROMPT/.test(form), true);
     check('confirm button says "Yes, confirmed"', /Yes, confirmed/.test(form), true);
     check("attestation only posted once confirmed", /attested && <input type="hidden" name="directorApprovalConfirmed"/.test(form), true);
-    check("the prompt asks for a reason", /reasonLabel="Why fewer than 3\? \(optional\)"/.test(form), true);
+    check("the prompt asks for a reason", /reasonLabel="Why fewer than 3\?"/.test(form), true);
+    check("confirming is blocked until it is filled in", /reasonRequired/.test(form), true);
     // The dialog unmounts on confirm, so the value has to live outside it.
     check("the reason is posted from outside the dialog",
       /name="shortSupplierListReason" value=\{shortListReason\}/.test(form), true);
 
     const ordersPage = readFileSync("src/app/(app)/orders/page.tsx", "utf8");
-    check("the reason is shown on the list", /shortSupplierListReason/.test(ordersPage), true);
-    check("a missing reason is called out rather than hidden", /No reason given/.test(ordersPage), true);
+    check("the reason rides along on the row", /shortSupplierListReason/.test(ordersPage), true);
+
+    console.log("\n=== the orders view is a filterable table ===");
+    check("rendered as a table", /<TableHeaderCell>/.test(ordersPage), true);
+    check("status is a column", /<TableHeaderCell>Status<\/TableHeaderCell>/.test(ordersPage), true);
+    check("status filter reaches the query", /\.\.\.\(status \? \{ status \} : \{\}\)/.test(ordersPage), true);
+    check("type filter reaches the query", /requestType: type/.test(ordersPage), true);
+    check("search reaches the linked sample",
+      /existingSample: \{ sampleCode: \{ contains: query \} \}/.test(ordersPage), true);
+    check("search reaches all three supplier boxes",
+      /supplier1: \{ contains: query \}[\s\S]*supplier3: \{ contains: query \}/.test(ordersPage), true);
+    check("an unknown status is ignored rather than passed through",
+      /ORDER_STATUSES\.includes/.test(ordersPage), true);
+
+    const filters = readFileSync("src/app/(app)/orders/order-filters.tsx", "utf8");
+    check("filters live in the URL", /router\.push/.test(filters), true);
+    check("a clear control exists", /Clear/.test(filters), true);
 
     const action = readFileSync("src/app/(app)/orders/actions.ts", "utf8");
     check("server re-checks the nudge", /needsShortSupplierListConfirmation/.test(action), true);

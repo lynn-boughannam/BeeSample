@@ -202,9 +202,11 @@ export function OrderForm({
           {state.formError}
         </p>
       )}
-      {errors.directorApprovalConfirmed && (
+      {/* Both of these belong to dialogs that have already closed by the time the server
+          answers, so they surface as banners rather than field errors nobody can see. */}
+      {(errors.directorApprovalConfirmed || errors.shortSupplierListReason) && (
         <p className="text-body rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-danger">
-          {errors.directorApprovalConfirmed}
+          {errors.directorApprovalConfirmed ?? errors.shortSupplierListReason}
         </p>
       )}
 
@@ -534,7 +536,8 @@ export function OrderForm({
           body={SHORT_SUPPLIER_LIST_PROMPT}
           detail={`You have provided ${supplierCount} of 3.`}
           confirmLabel="Yes, confirmed"
-          reasonLabel="Why fewer than 3? (optional)"
+          reasonLabel="Why fewer than 3?"
+          reasonRequired
           reasonPlaceholder="e.g. sole supplier for this material, or urgent trial"
           reasonValue={shortListReason}
           onReasonChange={setShortListReason}
@@ -564,6 +567,7 @@ function Dialog({
   reasonLabel,
   reasonPlaceholder,
   reasonValue,
+  reasonRequired,
   onReasonChange,
   onConfirm,
   onCancel,
@@ -578,10 +582,15 @@ function Dialog({
   reasonLabel?: string;
   reasonPlaceholder?: string;
   reasonValue?: string;
+  // Confirming is blocked until it's filled in — procurement acts on this, so an empty
+  // one would just move the question to an email.
+  reasonRequired?: boolean;
   onReasonChange?: (value: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const blockedOnReason = Boolean(reasonRequired) && (reasonValue ?? "").trim() === "";
+
   return (
     <div
       role="dialog"
@@ -607,11 +616,16 @@ function Dialog({
             </FormField>
           </div>
         )}
+        {blockedOnReason && (
+          <p className="text-caption mt-1 text-neutral-dark/55">
+            A reason is needed before this can be submitted.
+          </p>
+        )}
         <div className="mt-4 flex flex-wrap justify-end gap-3">
           <Button type="button" variant="secondary" onClick={onCancel}>
             Go back
           </Button>
-          <Button type="button" onClick={onConfirm}>
+          <Button type="button" onClick={onConfirm} disabled={blockedOnReason}>
             {confirmLabel}
           </Button>
         </div>

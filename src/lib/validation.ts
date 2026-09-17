@@ -297,7 +297,6 @@ export const CreateSampleOrderSchema = z
     // The form posts these only once the requester has actually confirmed.
     directorApprovalConfirmed: z.coerce.boolean(),
     shortSupplierListAcknowledged: z.coerce.boolean().optional(),
-    // Optional by design: the acknowledgement is the gate, the reason is the context.
     shortSupplierListReason: orderText,
   })
   // AC4: nothing saves without the attestation, whatever the type.
@@ -309,4 +308,10 @@ export const CreateSampleOrderSchema = z
   .refine((v) => !needsExistingSample(v.requestType) || Boolean(v.existingSampleId), {
     path: ["existingSampleId"],
     error: "Choose the sample this request is for.",
+  })
+  // Proceeding with a short supplier list has to be explained, not just waved through:
+  // procurement acts on the reason, and "confirmed" on its own tells them nothing.
+  .refine((v) => !v.shortSupplierListAcknowledged || Boolean(v.shortSupplierListReason), {
+    path: ["shortSupplierListReason"],
+    error: "Give a reason for providing fewer than 3 supplier options.",
   });
