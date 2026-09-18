@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FormField, Input, Select } from "@/components/ui/input";
-import { ORDER_STATUSES } from "@/lib/types";
+import { ORDER_STATUSES, ORDER_STATUS_LABELS } from "@/lib/types";
 import { ORDER_REQUEST_TYPES, ORDER_REQUEST_TYPE_LABELS } from "@/lib/orders";
 
 // Filters live in the URL, so a filtered view is shareable and survives a refresh — the
@@ -79,7 +79,7 @@ export function OrderFilters({
             <option value="">All statuses</option>
             {ORDER_STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {ORDER_STATUS_LABELS[s]}
               </option>
             ))}
           </Select>

@@ -10,7 +10,9 @@ export type NavItem = {
 };
 
 export const NAV_ITEMS: NavItem[] = [
-  { key: "dashboard", label: "Dashboard", href: "/dashboard", roles: ["ADMIN", "FORMULATOR"], pinned: true },
+  // Every role needs somewhere to land, including the two order-workflow roles whose
+  // own screens arrive in later phases.
+  { key: "dashboard", label: "Dashboard", href: "/dashboard", roles: ["ADMIN", "FORMULATOR", "DIRECTOR", "SUPPLY_CHAIN", "CSS"], pinned: true },
   { key: "library", label: "Sample Library", href: "/library", roles: ["ADMIN", "FORMULATOR"] },
   { key: "add-sample", label: "Add Sample", href: "/library/add", roles: ["ADMIN"] },
   { key: "locations", label: "Locations & Stock", href: "/locations", roles: ["ADMIN", "FORMULATOR"] },

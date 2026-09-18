@@ -119,11 +119,12 @@ async function main() {
     },
   });
   await prisma.sampleOrder.create({
-    data: { requestType: "NEW", inciName: PREFIX + "NEWRM", supplier1: "Acme", orderedById: admin.id, status: "PENDING", directorApprovalConfirmed: true },
+    data: { requestType: "NEW", inciName: PREFIX + "NEWRM", supplier1: "Acme", orderedById: admin.id, status: "SUBMITTED", directorApprovalConfirmed: true },
   });
   await prisma.sampleOrder.create({
     data: {
-      requestType: "NEW", inciName: PREFIX + "INPROGRESS", supplier1: "Acme", orderedById: admin.id, status: "APPROVED", directorApprovalConfirmed: true,
+      requestType: "NEW", inciName: PREFIX + "INPROGRESS", supplier1: "Acme", // Mid-workflow: past approval, PR raised, not yet arrived.
+      orderedById: admin.id, status: "PR_ISSUED_AWAITING_RECEIPT", directorApprovalConfirmed: true,
       approvedById: admin.id, decidedAt: new Date(), prNumber: "PR-9001",
     },
   });

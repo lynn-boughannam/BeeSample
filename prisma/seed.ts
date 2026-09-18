@@ -204,6 +204,8 @@ async function main() {
     { name: "ADMIN", description: "Full system access" },
     { name: "FORMULATOR", description: "Own-scoped access" },
     { name: "DIRECTOR", description: "Scope not yet defined" },
+    { name: "SUPPLY_CHAIN", description: "Runs the supplier and document stage of a sample order" },
+    { name: "CSS", description: "Reviews supplier costing on a sample order" },
   ];
   const roles: Record<string, { id: string }> = {};
   for (const r of roleRows) {
@@ -237,8 +239,29 @@ async function main() {
     },
   });
 
+  // One test user per new role, so each phase of the order workflow can actually be
+  // logged in and exercised.
+  const workflowUsers: Array<{ adUsername: string; name: string; role: string }> = [
+    { adUsername: "supplychain.test", name: "Supply Chain Test", role: "SUPPLY_CHAIN" },
+    { adUsername: "css.test", name: "CSS Test", role: "CSS" },
+  ];
+  for (const u of workflowUsers) {
+    await prisma.user.upsert({
+      where: { adUsername: u.adUsername },
+      update: { name: u.name, roleId: roles[u.role].id, isActive: true },
+      create: {
+        adUsername: u.adUsername,
+        name: u.name,
+        roleId: roles[u.role].id,
+        isActive: true,
+      },
+    });
+  }
+
   console.log(
-    `Seed complete. Admin AD usernames: ${adminUsername}, lynn.boughannam. Both authenticate via the real AD bind now (src/lib/ldap.ts) — no password bypass anymore.`
+    `Seed complete. Admins: ${adminUsername}, lynn.boughannam. Workflow test users: ${workflowUsers
+      .map((u) => `${u.adUsername} (${u.role})`)
+      .join(", ")}. All authenticate via the real AD bind (src/lib/ldap.ts).`
   );
 }
 

@@ -73,6 +73,8 @@ model User {
   transactions    Transaction[]     @relation("PerformedBy")
   locationMoves   LocationHistory[] @relation("MovedBy")
   piecesHeld      SamplePiece[]     @relation("CheckedOutTo")
+  cssDecisions    SampleOrderSupplier[]         @relation("CssDecidedBy")
+  orderDocuments  SampleOrderSupplierDocument[] @relation("DocumentUploadedBy")
   piecesDiscarded SamplePiece[]     @relation("PieceDiscardedBy")
   transactionsAbout Transaction[]   @relation("TransactionSubject")
   savedViews      SavedTableView[]
@@ -271,6 +273,9 @@ model Sample {
   requests        SampleRequest[]
   feedback        Feedback[]
   orderReceipts   SampleOrder[]
+  // The request this sample came from, once received and booked in. A list only because
+  // the FK cannot be @unique (see SampleOrder.producedSampleId); at most one points here.
+  producedByOrder SampleOrder[]     @relation("ProducedByOrder")
 
   @@index([category, subcategory1, subcategory2])
   @@map("samples")
@@ -481,19 +486,102 @@ model SampleOrder {
   orderedBy   User     @relation("OrderedBy", fields: [orderedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   createdAt   DateTime @default(now())
 
-  // For the receiving/review step still to be specified.
-  status       String    @default("PENDING")
-  prNumber     String?
+  // Where the request has reached. See ORDER_STATUSES in src/lib/types.ts for the
+  // sequence; SUBMITTED is where every request starts.
+  status       String    @default("SUBMITTED")
   approvedById String?
   approvedBy   User?     @relation("OrderApprovedBy", fields: [approvedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   decidedAt    DateTime?
-  receivedAt   DateTime?
+  // Why a request was rejected, so the requester isn't left guessing.
+  rejectionReason String?
+
+  // Purchase requisition reference, entered by hand once the PR is raised.
+  prNumber   String?
+  prIssuedAt DateTime?
+
+  // Reception. receivedSampleCode is the code assigned when the arriving material is
+  // booked into the library; producedSample is the row it became, once it exists.
+  receivedAt         DateTime?
+  receivedSampleCode String?
+  // Deliberately NOT @unique, for the same reason as Transaction.requestId: SQL Server
+  // treats NULLs as equal in a UNIQUE constraint, so marking this nullable column unique
+  // caps the whole table at ONE order that hasn't produced a sample yet — which is every
+  // order until it is received. One-sample-per-order is enforced in application code when
+  // the receiving phase lands; expressing it in the database needs a filtered index
+  // (WHERE producedSampleId IS NOT NULL) that Prisma cannot declare.
+  producedSampleId   String?
+  producedSample     Sample?   @relation("ProducedByOrder", fields: [producedSampleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   ingredients SampleOrderIngredient[]
+  suppliers   SampleOrderSupplier[]
 
   @@index([orderedById, createdAt])
   @@index([status])
   @@map("sample_orders")
+}
+
+// One per supplier being evaluated on a request, up to three. Documents, pricing, the CSS
+// decision and cost all differ per supplier rather than per order, so they live here — an
+// order-level cost field would have to pick a winner before anyone had chosen one.
+model SampleOrderSupplier {
+  id      String      @id @default(cuid())
+  orderId String
+  order   SampleOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // 1, 2 or 3 — which of the request's three supplier options this is.
+  position     Int
+  supplierName String
+
+  // The 7-working-day document SLA. dueDate is computed from requestedAt by
+  // supplierDocumentDueDate() in src/lib/working-days.ts and stored, so a deadline agreed
+  // with a supplier can't silently move if the working-day rule is ever changed.
+  documentsRequestedAt DateTime?
+  documentsDueAt       DateTime?
+
+  // Quoted terms.
+  landedPrice  Decimal? @db.Decimal(12, 2)
+  moq          String?
+  cost         Decimal? @db.Decimal(12, 2)
+  shippingCost Decimal? @db.Decimal(12, 2)
+
+  // CSS review of this supplier's costing. PENDING | APPROVED | REJECTED — see
+  // CSS_DECISIONS in src/lib/types.ts.
+  cssDecision     String    @default("PENDING")
+  cssDecisionAt   DateTime?
+  cssDecidedById  String?
+  cssDecidedBy    User?     @relation("CssDecidedBy", fields: [cssDecidedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  cssNote         String?
+
+  // Set on the one supplier the order proceeds with.
+  isSelected Boolean @default(false)
+
+  documents SampleOrderSupplierDocument[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orderId, position])
+  @@index([orderId, cssDecision])
+  @@map("sample_order_suppliers")
+}
+
+// A document supplied against one supplier option. Storage itself comes with the phase
+// that adds uploading; this records what was attached and by whom.
+model SampleOrderSupplierDocument {
+  id                String              @id @default(cuid())
+  orderSupplierId   String
+  orderSupplier     SampleOrderSupplier @relation(fields: [orderSupplierId], references: [id], onDelete: Cascade)
+  fileName          String
+  // Where the bytes live. Nullable because the upload mechanism is a later phase.
+  storagePath       String?
+  contentType       String?
+  sizeBytes         Int?
+  uploadedById      String?
+  uploadedBy        User?               @relation("DocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  uploadedAt        DateTime            @default(now())
+
+  @@index([orderSupplierId])
+  @@map("sample_order_supplier_documents")
 }
 
 // INCI chosen from the master list for a request. Mirrors SampleIngredient so an order and

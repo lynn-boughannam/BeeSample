@@ -12,7 +12,7 @@ import {
   TableHeaderCell,
   TableRow,
 } from "@/components/ui/table";
-import { ORDER_STATUSES } from "@/lib/types";
+import { ORDER_STATUSES, ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/types";
 import {
   ORDER_REQUEST_TYPES,
   ORDER_REQUEST_TYPE_LABELS,
@@ -28,11 +28,17 @@ import { OrderFilters } from "./order-filters";
 
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
-const STATUS_VARIANT: Record<string, "info" | "success" | "danger" | "neutral"> = {
-  PENDING: "info",
-  APPROVED: "success",
-  DENIED: "danger",
-  RECEIVED: "neutral",
+// Colour tracks what the status means, not where it sits in the sequence: waiting on
+// someone is amber, moving is blue, finished is green, dead is red.
+const STATUS_VARIANT: Record<OrderStatus, "info" | "success" | "danger" | "warning" | "neutral"> = {
+  SUBMITTED: "info",
+  REJECTED: "danger",
+  APPROVED_PENDING_SUPPLY_CHAIN: "warning",
+  SUPPLIER_SELECTED: "info",
+  COSTING_SUBMITTED_PENDING_FORMULATOR: "warning",
+  FORMULATOR_APPROVED_PENDING_PR: "warning",
+  PR_ISSUED_AWAITING_RECEIPT: "info",
+  RECEIVED: "success",
 };
 
 export default async function OrdersPage({
@@ -203,8 +209,8 @@ export default async function OrdersPage({
                 <TableCell>{order.projectName ?? dash}</TableCell>
                 <TableCell>{order.orderedBy.name}</TableCell>
                 <TableCell>
-                  <Badge variant={STATUS_VARIANT[order.status] ?? "neutral"}>
-                    {order.status}
+                  <Badge variant={STATUS_VARIANT[order.status as OrderStatus] ?? "neutral"}>
+                    {ORDER_STATUS_LABELS[order.status as OrderStatus] ?? order.status}
                   </Badge>
                 </TableCell>
               </TableRow>

@@ -104,10 +104,23 @@ export async function loadAdminDashboard(): Promise<AdminDashboard> {
     prisma.sampleRequest.count({ where: { status: "PENDING" } }),
     // Approved but never reported on — the same definition the Formulator dashboard uses.
     prisma.sampleRequest.count({ where: { status: "APPROVED", feedback: null } }),
-    prisma.sampleOrder.count({ where: { status: "PENDING" } }),
-    // Past approval, not yet received. ORDER_STATUSES has no separate "ordered" state, so
-    // an approved order that's been raised as a PR is still APPROVED here.
-    prisma.sampleOrder.count({ where: { status: "APPROVED" } }),
+    // Newly raised, nobody has acted on it yet.
+    prisma.sampleOrder.count({ where: { status: "SUBMITTED" } }),
+    // Anywhere between approval and arrival — every stage of the workflow that is
+    // actively being worked, which is what "in progress" means to whoever reads the tile.
+    prisma.sampleOrder.count({
+      where: {
+        status: {
+          in: [
+            "APPROVED_PENDING_SUPPLY_CHAIN",
+            "SUPPLIER_SELECTED",
+            "COSTING_SUBMITTED_PENDING_FORMULATOR",
+            "FORMULATOR_APPROVED_PENDING_PR",
+            "PR_ISSUED_AWAITING_RECEIPT",
+          ],
+        },
+      },
+    }),
     // Counts samples, not pieces, so the tile agrees with the list it links to
     // (/library?discarded=1 shows discarded samples).
     prisma.sample.count({ where: { isDiscarded: true } }),

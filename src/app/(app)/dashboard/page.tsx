@@ -113,10 +113,35 @@ async function FormulatorDashboard({ userId }: { userId: string }) {
 export default async function DashboardPage() {
   const session = await verifySession();
 
-  return session.user.role === "ADMIN" ? (
-    <AdminDashboard />
-  ) : (
-    <FormulatorDashboard userId={session.user.id} />
+  const role = session.user.role;
+  if (role === "ADMIN") return <AdminDashboard />;
+  // The sample order workflow roles have no screens yet — their phases come later. A
+  // placeholder is deliberate: dropping them into the Formulator dashboard would show
+  // them someone else's view of the data and read as a bug.
+  if (role === "SUPPLY_CHAIN" || role === "CSS") {
+    return <WorkflowRolePlaceholder role={role} name={session.user.name ?? "there"} />;
+  }
+  return <FormulatorDashboard userId={session.user.id} />;
+}
+
+function WorkflowRolePlaceholder({ role, name }: { role: "SUPPLY_CHAIN" | "CSS"; name: string }) {
+  const what =
+    role === "SUPPLY_CHAIN"
+      ? "requesting documents from suppliers and recording what comes back"
+      : "reviewing supplier costing and recording an approve or reject decision";
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      <h1 className="text-page-title text-neutral-dark">Dashboard</h1>
+      <section className="rounded-lg border border-neutral-dark/10 bg-white p-8 shadow-elevated">
+        <p className="text-body text-neutral-dark">
+          Signed in as {name}. Your role is set up and working.
+        </p>
+        <p className="text-body mt-3 text-neutral-dark/70">
+          The screens for {what} are being built. Nothing is waiting on you here yet.
+        </p>
+      </section>
+    </div>
   );
 }
 
