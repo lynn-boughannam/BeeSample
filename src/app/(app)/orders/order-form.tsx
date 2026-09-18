@@ -55,8 +55,9 @@ export function OrderForm({
   sources: readonly string[];
   functions: string[];
   physicalForms: string[];
-  // Distinct Sample.supplier values rather than the managed Supplier table, so the list
-  // reflects who has actually supplied something (SLT-58).
+  // The managed Supplier table, plus names already in use on samples. Offered as
+  // suggestions rather than a closed set: a supplier not yet on the list is created on
+  // submit, so a request is never blocked on the reference data catching up.
   suppliers: string[];
   projects: string[];
   action: (prev: OrderFormState, fd: FormData) => Promise<OrderFormState>;
@@ -220,6 +221,13 @@ export function OrderForm({
   return (
     <form ref={formRef} action={formAction} onSubmit={handleSubmit} className="space-y-6">
       <input type="hidden" name="requestType" value={requestType} />
+      {/* One datalist, referenced by every supplier box: type to filter, or type something
+          new. A <select> couldn't accept a supplier that isn't on the list yet. */}
+      <datalist id="supplierOptions">
+        {suppliers.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
       {/* Only ever posted once the requester has actually confirmed in the dialog. */}
       {attested && <input type="hidden" name="directorApprovalConfirmed" value="on" />}
       {acknowledgedShortList && (
@@ -567,6 +575,7 @@ export function OrderForm({
             <p className="text-caption mb-4 text-neutral-dark/60">
               Three options are wanted for a new material so procurement can compare. None is
               individually required — you&apos;ll be asked to confirm if you provide fewer.
+              Any supplier that isn&apos;t on the list yet is added to it on submit.
             </p>
             <div className="grid gap-4 sm:grid-cols-3">
               {[
@@ -583,6 +592,8 @@ export function OrderForm({
                   <Input
                     id={name as string}
                     name={name as string}
+                    list="supplierOptions"
+                    placeholder="Choose or type a new supplier"
                     value={value as string}
                     invalid={i === 0 && Boolean(errors.supplier1)}
                     onChange={(e) => (setter as (v: string) => void)(e.target.value)}
@@ -602,18 +613,18 @@ export function OrderForm({
                 : "A new source for a material we already hold — choose or type the supplier."}
             </p>
             <FormField label="Supplier Name" htmlFor="supplierName">
-              <Select
+              <Input
                 id="supplierName"
                 name="supplierName"
+                list="supplierOptions"
+                placeholder="Choose or type a new supplier"
                 value={prefilled.supplierName}
                 onChange={(e) => setPrefilledField("supplierName", e.target.value)}
-              >
-                <option value="">Select…</option>
-                {suppliers.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </Select>
+              />
             </FormField>
+            <p className="text-caption mt-1 text-neutral-dark/55">
+              A supplier that isn&apos;t on the list yet is added to it on submit.
+            </p>
           </div>
         )}
       </section>

@@ -124,6 +124,25 @@ export async function createSampleOrder(
     }
   }
 
+  // Suppliers named on the request join the managed list if they aren't on it already, so
+  // the reference data grows from real use instead of having to be maintained ahead of it.
+  // Matching is case-insensitive via the collation, so "firmenich" won't create a second
+  // "Firmenich".
+  async function ensureSupplier(raw: string | null | undefined) {
+    const name = (raw ?? "").trim();
+    if (!name) return;
+    const existing = await prisma.supplier.findFirst({ where: { name }, select: { id: true } });
+    if (existing) return;
+    try {
+      await prisma.supplier.create({ data: { name } });
+    } catch (error) {
+      // A unique-constraint clash means someone else added it a moment ago, which is the
+      // outcome we wanted anyway. Anything else is worth knowing about, but not worth
+      // failing a submitted request over — the name is still recorded on the order.
+      console.error("createSampleOrder: could not add supplier to the list", name, error);
+    }
+  }
+
   // The sample has to exist and still be in the library — a request pointing at a deleted
   // row would be unactionable for procurement.
   let existingSampleId: string | null = null;
@@ -194,7 +213,18 @@ export async function createSampleOrder(
     return { formError: "Could not submit that request. Try again." };
   }
 
+  // Done after the request is safely stored: a supplier that didn't make it onto the
+  // reference list is a tidiness problem, not a reason to lose the request.
+  if (isNew) {
+    await ensureSupplier(data.supplier1);
+    await ensureSupplier(data.supplier2);
+    await ensureSupplier(data.supplier3);
+  } else {
+    await ensureSupplier(data.supplierName);
+  }
+
   revalidatePath("/orders");
   revalidatePath("/dashboard");
+  revalidatePath("/settings/lists");
   redirect("/orders?submitted=1");
 }

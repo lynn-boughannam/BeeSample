@@ -10,7 +10,8 @@ import { createSampleOrder } from "../actions";
 export default async function NewOrderPage() {
   await verifySession();
 
-  const [samples, functions, physicalForms, projects, supplierRows, ingredients] = await Promise.all([
+  const [samples, functions, physicalForms, projects, supplierRows, sampleSupplierRows, ingredients] =
+    await Promise.all([
     // The live library is the catalogue for an "existing sample" request. Discarded
     // samples are excluded: re-ordering from a record we've retired is not the intent.
     prisma.sample.findMany({
@@ -32,8 +33,10 @@ export default async function NewOrderPage() {
     prisma.sampleFunction.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
     prisma.physicalForm.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
     prisma.project.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
-    // Distinct Sample.supplier values rather than the managed Supplier table, per the
-    // story: the list should reflect who has actually supplied something.
+    // The managed Supplier table is the master list, but names already in use on samples
+    // are suggested too — otherwise a supplier the library demonstrably buys from could be
+    // missing from the dropdown just because nobody added it to the reference list.
+    prisma.supplier.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
     prisma.sample.findMany({
       distinct: ["supplier"],
       select: { supplier: true },
@@ -45,6 +48,21 @@ export default async function NewOrderPage() {
       select: { id: true, inciName: true, chemicalFamily: true },
     }),
   ]);
+
+  // Deduplicated case-insensitively, since the two sources can spell the same supplier
+  // differently and a dropdown showing both would look like two companies.
+  const seen = new Set<string>();
+  const supplierOptions: string[] = [];
+  for (const name of [
+    ...supplierRows.map((r) => r.name),
+    ...sampleSupplierRows.map((r) => r.supplier),
+  ]) {
+    const key = (name ?? "").trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    supplierOptions.push(name.trim());
+  }
+  supplierOptions.sort((a, b) => a.localeCompare(b));
 
   const options: SampleOption[] = samples.map((s) => ({
     id: s.id,
@@ -80,7 +98,7 @@ export default async function NewOrderPage() {
         sources={SAMPLE_SOURCES}
         functions={functions.map((f) => f.name)}
         physicalForms={physicalForms.map((p) => p.name)}
-        suppliers={supplierRows.map((s) => s.supplier).filter(Boolean)}
+        suppliers={supplierOptions}
         projects={projects.map((p) => p.name)}
         action={createSampleOrder}
       />
