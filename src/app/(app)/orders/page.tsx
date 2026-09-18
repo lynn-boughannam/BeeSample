@@ -167,15 +167,25 @@ export default async function OrdersPage({
               <TableRow key={order.id}>
                 <TableCell>{day(order.createdAt)}</TableCell>
                 <TableCell>
-                  {order.existingSample ? (
-                    <Link
-                      href={`/library/${order.existingSample.id}`}
-                      className="font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
-                    >
-                      {orderLabel(order)}
-                    </Link>
-                  ) : (
-                    <span className="font-medium">{orderLabel(order)}</span>
+                  {/* The request, not the sample it was raised against. A submitted order
+                      isn't a library entry and may never become one — linking to the
+                      source sample made it look as though it already had. */}
+                  <Link
+                    href={`/orders/${order.id}`}
+                    className="font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
+                  >
+                    {orderLabel(order)}
+                  </Link>
+                  {order.existingSample && (
+                    <span className="text-caption block text-neutral-dark/50">
+                      against{" "}
+                      <Link
+                        href={`/library/${order.existingSample.id}`}
+                        className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
+                      >
+                        {order.existingSample.sampleCode}
+                      </Link>
+                    </span>
                   )}
                 </TableCell>
                 <TableCell>

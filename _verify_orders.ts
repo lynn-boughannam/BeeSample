@@ -178,6 +178,24 @@ async function main() {
     check("an unknown status is ignored rather than passed through",
       /ORDER_STATUSES\.includes/.test(ordersPage), true);
 
+    console.log("\n=== a request is viewable in its own right ===");
+    const detail = readFileSync("src/app/(app)/orders/[id]/page.tsx", "utf8");
+    // A submitted order is not a library entry and may never become one, so the row has
+    // to open the request, not the sample it was raised against.
+    check("the list row opens the order", /href=\{`\/orders\/\$\{order\.id\}`\}/.test(ordersPage), true);
+    check("the row no longer opens the source sample instead",
+      /href=\{`\/library\/\$\{order\.existingSample\.id\}`\}[\s\S]{0,200}orderLabel\(order\)/.test(ordersPage), false);
+    check("the source sample is still reachable, labelled as a reference",
+      /against\{" "\}/.test(ordersPage), true);
+    check("the detail page exists", detail.length > 0, true);
+    check("it shows where the request has reached", /ORDER_STATUS_SEQUENCE/.test(detail), true);
+    check("it shows per-supplier records", /order\.suppliers\.map/.test(detail), true);
+    check("it falls back to the named suppliers before Supply Chain picks it up",
+      /SupplierNamesOnly/.test(detail), true);
+    check("a formulator can only open their own", /order\.orderedById !== session\.user\.id/.test(detail), true);
+    check("a produced sample is distinguished from not-yet-received",
+      /Not received yet/.test(detail), true);
+
     const filters = readFileSync("src/app/(app)/orders/order-filters.tsx", "utf8");
     check("filters live in the URL", /router\.push/.test(filters), true);
     check("a clear control exists", /Clear/.test(filters), true);
