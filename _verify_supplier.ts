@@ -82,11 +82,14 @@ async function main() {
     check("the form says new suppliers get saved", /added to it on submit/.test(form), true);
 
     const action = readFileSync("src/app/(app)/orders/actions.ts", "utf8");
-    check("the action ensures each supplier exists", /ensureSupplier/.test(action), true);
+    check("the action ensures each supplier exists", /ensureSupplierNamed/.test(action), true);
     check("all three boxes are covered",
-      /ensureSupplier\(data\.supplier1\)[\s\S]*ensureSupplier\(data\.supplier3\)/.test(action), true);
+      /ensureSupplierNamed\(data\.supplier1\)[\s\S]*ensureSupplierNamed\(data\.supplier3\)/.test(action), true);
     check("the single-supplier types are covered too",
-      /ensureSupplier\(data\.supplierName\)/.test(action), true);
+      /ensureSupplierNamed\(data\.supplierName\)/.test(action), true);
+    // Editing a request names suppliers too, so it has to ensure them as well.
+    check("editing a request ensures them too",
+      (action.match(/ensureSupplierNamed\(data\.supplierName\)/g) ?? []).length, 2);
     check("the reference list page is revalidated",
       /revalidatePath\("\/settings\/lists"\)/.test(action), true);
 

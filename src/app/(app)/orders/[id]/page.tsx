@@ -9,7 +9,14 @@ import {
   type CssDecision,
   type OrderStatus,
 } from "@/lib/types";
-import { ORDER_REQUEST_TYPE_LABELS, type OrderRequestType } from "@/lib/orders";
+import {
+  ORDER_REQUEST_TYPE_LABELS,
+  canEditOrder,
+  isAwaitingAdminReview,
+  type OrderRequestType,
+} from "@/lib/orders";
+import { ReviewPanel } from "./review-panel";
+import { approveOrder, rejectOrder } from "./review-actions";
 
 // A submitted request is not a sample yet — it may never become one. This is where an
 // order is read: the sample it was raised against (if any) is a reference on it, not a
@@ -36,10 +43,13 @@ const CSS_VARIANT: Record<CssDecision, "success" | "danger" | "neutral"> = {
 
 export default async function OrderDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ saved?: string }>;
 }) {
   const { id } = await params;
+  const { saved } = await searchParams;
   const session = await verifySession();
   const isAdmin = session.user.role === "ADMIN";
 
@@ -92,6 +102,23 @@ export default async function OrderDetailPage({
           </Badge>
         </div>
       </div>
+
+      {saved === "1" && (
+        <p className="text-body rounded-lg border border-success/40 bg-success/10 px-4 py-3 text-on-success">
+          Changes saved.
+        </p>
+      )}
+
+      {/* Phase 1. Only an Admin decides, and only while the request is still waiting for
+          it — the action checks again regardless of what this renders. */}
+      {isAdmin && isAwaitingAdminReview(status) && (
+        <ReviewPanel
+          orderId={order.id}
+          canEdit={canEditOrder(status)}
+          approveAction={approveOrder}
+          rejectAction={rejectOrder}
+        />
+      )}
 
       {/* Where the request has reached. Rejected isn't on the track — it ends it. */}
       {status === "REJECTED" ? (

@@ -1,3 +1,5 @@
+import type { OrderStatus } from "@/lib/types";
+
 // Sample order requests (SLT-58). Pure values and rules, no database access, so the
 // request form can import them directly.
 
@@ -113,4 +115,61 @@ export function orderLabel(order: {
     return `${order.existingSample.sampleCode} · ${order.existingSample.rmName}`;
   }
   return order.inciName?.trim() || "New raw material";
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1 — Admin review
+// ---------------------------------------------------------------------------
+
+
+// Rejection ends a request. Nothing further may be done to one — not approving it, not
+// editing it, not rejecting it again. Kept as a predicate rather than a scattered
+// `status === "REJECTED"` so every guard agrees about what terminal means.
+export function isTerminal(status: OrderStatus): boolean {
+  return status === "REJECTED";
+}
+
+// Admin review acts on a request that is still waiting for it, and only then. An order
+// already with Supply Chain is past this stage, not available to it.
+export function isAwaitingAdminReview(status: OrderStatus): boolean {
+  return status === "SUBMITTED";
+}
+
+// Editing is part of reviewing, so it stops when review does. Once approved the request
+// has been handed on, and changing it underneath whoever picked it up would be worse than
+// making them ask for a new one.
+export function canEditOrder(status: OrderStatus): boolean {
+  return isAwaitingAdminReview(status);
+}
+
+export type ReviewDecision = "APPROVE" | "REJECT";
+
+export const REVIEW_TARGET: Record<ReviewDecision, OrderStatus> = {
+  APPROVE: "APPROVED_PENDING_SUPPLY_CHAIN",
+  REJECT: "REJECTED",
+};
+
+/**
+ * Whether a review decision may be applied to an order in this state, and if not, why.
+ *
+ * Takes no decision argument on purpose: approve and reject are allowed under exactly the
+ * same condition — the request is still awaiting review — and a parameter here would imply
+ * they differ.
+ *
+ * Returns the reason rather than a bare false so the refusal can be shown to whoever
+ * tried: "this was already rejected" is useful, "no" is not.
+ */
+export function checkReviewAllowed(
+  status: OrderStatus
+): { ok: true } | { ok: false; reason: string } {
+  if (isTerminal(status)) {
+    return { ok: false, reason: "This request was rejected. Nothing further can be done to it." };
+  }
+  if (!isAwaitingAdminReview(status)) {
+    return {
+      ok: false,
+      reason: "This request has already been reviewed and moved on to Supply Chain.",
+    };
+  }
+  return { ok: true };
 }

@@ -203,9 +203,16 @@ async function main() {
     const action = readFileSync("src/app/(app)/orders/actions.ts", "utf8");
     check("server re-checks the nudge", /needsShortSupplierListConfirmation/.test(action), true);
     check("user comes from the session", /orderedById: session\.user\.id/.test(action), true);
-    check("open to formulators too", /verifySession\(\)/.test(action), true);
-    // A call, not the word — the comment above it explains why verifySession is right.
-    check("not admin-gated", /requireAdmin\(/.test(action), false);
+    // Scoped to createSampleOrder: the same file also holds updateSampleOrder, which IS
+    // Admin-only, so grepping the whole file would now be checking the wrong function.
+    const createFn = action.slice(
+      action.indexOf("export async function createSampleOrder"),
+      action.indexOf("export async function updateSampleOrder")
+    );
+    check("raising a request is open to formulators", /verifySession\(\)/.test(createFn), true);
+    check("raising a request is not admin-gated", /requireAdmin\(/.test(createFn), false);
+    check("editing one is admin-gated",
+      /requireAdmin\(\)/.test(action.slice(action.indexOf("export async function updateSampleOrder"))), true);
 
     check("the picker is a multi-select over the master list",
       /type="checkbox"[\s\S]*checked=\{checkedInci\.has\(ing\.id\)\}/.test(form), true);

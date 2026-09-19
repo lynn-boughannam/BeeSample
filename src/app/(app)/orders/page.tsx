@@ -102,6 +102,11 @@ export default async function OrdersPage({
     prisma.sampleOrder.count({ where: isAdmin ? {} : { orderedById: session.user.id } }),
   ]);
 
+  // Phase 1 — the review queue. Only an Admin acts on it, so only they are told about it.
+  const awaitingReview = isAdmin
+    ? await prisma.sampleOrder.count({ where: { status: "SUBMITTED" } })
+    : 0;
+
   const filtered = Boolean(query || type || status);
 
   return (
@@ -127,6 +132,18 @@ export default async function OrdersPage({
         <p className="text-body rounded-lg border border-success/40 bg-success/10 px-4 py-3 text-on-success">
           Request submitted. Procurement can see it now.
         </p>
+      )}
+
+      {awaitingReview > 0 && status !== "SUBMITTED" && (
+        <Link
+          href="/orders?status=SUBMITTED"
+          className="text-body flex flex-wrap items-center gap-2 rounded-lg border border-brand-secondary/30 bg-brand-primary/[0.08] px-4 py-3 text-neutral-dark transition-colors duration-150 hover:bg-brand-primary/[0.14] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
+        >
+          <span className="font-semibold">
+            {awaitingReview} request{awaitingReview === 1 ? "" : "s"} awaiting your review
+          </span>
+          <span className="text-neutral-dark/60">— open the queue</span>
+        </Link>
       )}
 
       <OrderFilters q={query} type={type} status={status} />

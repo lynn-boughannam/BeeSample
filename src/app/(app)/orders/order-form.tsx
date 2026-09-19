@@ -37,6 +37,31 @@ export type SampleOption = {
   projectName: string | null;
 };
 
+// What an existing request looks like when reopened for editing (Phase 1).
+export type OrderFormInitial = {
+  id: string;
+  requestType: OrderRequestType;
+  existingSampleId: string;
+  ingredientIds: string[];
+  inciName: string;
+  physicalForm: string;
+  category: string;
+  source: string;
+  function: string;
+  projectName: string;
+  mainCharacteristic: string;
+  application: string;
+  productFormat: string;
+  dosageOfUse: string;
+  requiredQuantityG: string;
+  referenceLink: string;
+  requiredDocuments: string;
+  supplierName: string;
+  supplier1: string;
+  supplier2: string;
+  supplier3: string;
+};
+
 export function OrderForm({
   samples,
   ingredients,
@@ -47,6 +72,9 @@ export function OrderForm({
   suppliers,
   projects,
   action,
+  initial,
+  submitLabel = "Submit request",
+  cancelHref = "/orders",
 }: {
   samples: SampleOption[];
   // The INCI master list, picked from rather than typed (SLT-58 follow-up).
@@ -61,32 +89,54 @@ export function OrderForm({
   suppliers: string[];
   projects: string[];
   action: (prev: OrderFormState, fd: FormData) => Promise<OrderFormState>;
+  // Present when an existing request is being edited rather than a new one raised.
+  initial?: OrderFormInitial;
+  submitLabel?: string;
+  cancelHref?: string;
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const [requestType, setRequestType] = useState<OrderRequestType>("NEW");
-  const [sampleId, setSampleId] = useState("");
+  const [requestType, setRequestType] = useState<OrderRequestType>(initial?.requestType ?? "NEW");
+  const [sampleId, setSampleId] = useState(initial?.existingSampleId ?? "");
   const [sampleSearch, setSampleSearch] = useState("");
   const [inciSearch, setInciSearch] = useState("");
-  const [checkedInci, setCheckedInci] = useState<Set<string>>(new Set());
+  const [checkedInci, setCheckedInci] = useState<Set<string>>(
+    new Set(initial?.ingredientIds ?? [])
+  );
 
   // Pre-filled fields are held in state so they can be populated on selection and still be
   // edited afterwards — the request records what was asked for, not a live pointer at the
   // sample.
   const [prefilled, setPrefilled] = useState({
-    inciName: "",
-    physicalForm: "",
-    category: "",
-    source: "",
-    function: "",
-    projectName: "",
-    supplierName: "",
+    inciName: initial?.inciName ?? "",
+    physicalForm: initial?.physicalForm ?? "",
+    category: initial?.category ?? "",
+    source: initial?.source ?? "",
+    function: initial?.function ?? "",
+    projectName: initial?.projectName ?? "",
+    supplierName: initial?.supplierName ?? "",
   });
 
-  const [supplier1, setSupplier1] = useState("");
-  const [supplier2, setSupplier2] = useState("");
-  const [supplier3, setSupplier3] = useState("");
+  // The always-fresh fields are held in state too when editing, so a reopened request
+  // shows what was actually submitted rather than an empty form.
+  const [request, setRequest] = useState({
+    mainCharacteristic: initial?.mainCharacteristic ?? "",
+    application: initial?.application ?? "",
+    productFormat: initial?.productFormat ?? "",
+    dosageOfUse: initial?.dosageOfUse ?? "",
+    requiredQuantityG: initial?.requiredQuantityG ?? "",
+    referenceLink: initial?.referenceLink ?? "",
+    requiredDocuments: initial?.requiredDocuments ?? "",
+  });
+
+  function setRequestField(name: keyof typeof request, value: string) {
+    setRequest((prev) => ({ ...prev, [name]: value }));
+  }
+
+  const [supplier1, setSupplier1] = useState(initial?.supplier1 ?? "");
+  const [supplier2, setSupplier2] = useState(initial?.supplier2 ?? "");
+  const [supplier3, setSupplier3] = useState(initial?.supplier3 ?? "");
 
   // Two separate gates, deliberately not merged: the attestation applies to every
   // submission, the supplier prompt only to a new material with a short list.
@@ -155,6 +205,9 @@ export function OrderForm({
   // Submission runs the gates in order: the supplier prompt first, because it is about the
   // content of the request, then the attestation, which is the final act of submitting.
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    // Both gates belong to the original submission. A reviewer editing the request is not
+    // re-declaring Director approval on someone else's behalf.
+    if (initial) return;
     if (
       !acknowledgedShortList &&
       needsShortSupplierListConfirmation(requestType, [supplier1, supplier2, supplier3])
@@ -221,6 +274,7 @@ export function OrderForm({
   return (
     <form ref={formRef} action={formAction} onSubmit={handleSubmit} className="space-y-6">
       <input type="hidden" name="requestType" value={requestType} />
+      {initial && <input type="hidden" name="orderId" value={initial.id} />}
       {/* One datalist, referenced by every supplier box: type to filter, or type something
           new. A <select> couldn't accept a supplier that isn't on the list yet. */}
       <datalist id="supplierOptions">
@@ -525,10 +579,20 @@ export function OrderForm({
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField label="Main Characteristic" htmlFor="mainCharacteristic">
-            <Input id="mainCharacteristic" name="mainCharacteristic" defaultValue="" />
+            <Input
+              id="mainCharacteristic"
+              name="mainCharacteristic"
+              value={request.mainCharacteristic}
+              onChange={(e) => setRequestField("mainCharacteristic", e.target.value)}
+            />
           </FormField>
           <FormField label="Application" htmlFor="application">
-            <Select id="application" name="application" defaultValue="">
+            <Select
+              id="application"
+              name="application"
+              value={request.application}
+              onChange={(e) => setRequestField("application", e.target.value)}
+            >
               <option value="">Select…</option>
               {PLACEHOLDER_APPLICATIONS.map((a) => (
                 <option key={a} value={a}>{a}</option>
@@ -536,7 +600,12 @@ export function OrderForm({
             </Select>
           </FormField>
           <FormField label="Product Format" htmlFor="productFormat">
-            <Select id="productFormat" name="productFormat" defaultValue="">
+            <Select
+              id="productFormat"
+              name="productFormat"
+              value={request.productFormat}
+              onChange={(e) => setRequestField("productFormat", e.target.value)}
+            >
               <option value="">Select…</option>
               {PLACEHOLDER_PRODUCT_FORMATS.map((f) => (
                 <option key={f} value={f}>{f}</option>
@@ -544,13 +613,28 @@ export function OrderForm({
             </Select>
           </FormField>
           <FormField label="Dosage of Use (%)" htmlFor="dosageOfUse">
-            <Input id="dosageOfUse" name="dosageOfUse" defaultValue="" />
+            <Input
+              id="dosageOfUse"
+              name="dosageOfUse"
+              value={request.dosageOfUse}
+              onChange={(e) => setRequestField("dosageOfUse", e.target.value)}
+            />
           </FormField>
           <FormField label="Required Quantity (g)" htmlFor="requiredQuantityG">
-            <Input id="requiredQuantityG" name="requiredQuantityG" defaultValue="" />
+            <Input
+              id="requiredQuantityG"
+              name="requiredQuantityG"
+              value={request.requiredQuantityG}
+              onChange={(e) => setRequestField("requiredQuantityG", e.target.value)}
+            />
           </FormField>
           <FormField label="Required Documents" htmlFor="requiredDocuments">
-            <Select id="requiredDocuments" name="requiredDocuments" defaultValue="">
+            <Select
+              id="requiredDocuments"
+              name="requiredDocuments"
+              value={request.requiredDocuments}
+              onChange={(e) => setRequestField("requiredDocuments", e.target.value)}
+            >
               <option value="">Select…</option>
               {PLACEHOLDER_REQUIRED_DOCUMENTS.map((d) => (
                 <option key={d} value={d}>{d}</option>
@@ -559,7 +643,13 @@ export function OrderForm({
           </FormField>
           <div className="sm:col-span-2">
             <FormField label="Reference / Link" htmlFor="referenceLink">
-              <Textarea id="referenceLink" name="referenceLink" rows={2} defaultValue="" />
+              <Textarea
+                id="referenceLink"
+                name="referenceLink"
+                rows={2}
+                value={request.referenceLink}
+                onChange={(e) => setRequestField("referenceLink", e.target.value)}
+              />
             </FormField>
           </div>
         </div>
@@ -631,10 +721,10 @@ export function OrderForm({
 
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={pending}>
-          {pending ? "Submitting…" : "Submit request"}
+          {pending ? "Saving…" : submitLabel}
         </Button>
         <Link
-          href="/orders"
+          href={cancelHref}
           className="text-body text-neutral-dark/70 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
         >
           Cancel

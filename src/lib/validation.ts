@@ -317,3 +317,39 @@ export const CreateSampleOrderSchema = z
     path: ["shortSupplierListReason"],
     error: "Give a reason for providing fewer than 3 supplier options.",
   });
+
+// Editing an existing request (Phase 1, Admin review). Deliberately not the create schema:
+// the Director attestation and the short-supplier acknowledgement belong to the person who
+// submitted the request, and asking the reviewer to re-make someone else's declaration
+// would be recording a claim they aren't in a position to make.
+export const UpdateSampleOrderSchema = z
+  .object({
+    orderId: z.string().min(1),
+    requestType: z.enum(ORDER_REQUEST_TYPES, { error: "Choose a request type" }),
+    existingSampleId: orderText,
+    ingredientIds: z.array(z.string().min(1)).default([]),
+
+    inciName: orderText,
+    physicalForm: orderText,
+    category: orderText,
+    source: orderText,
+    function: orderText,
+    projectName: orderText,
+
+    mainCharacteristic: orderText,
+    application: orderText,
+    productFormat: orderText,
+    dosageOfUse: orderText,
+    requiredQuantityG: orderText,
+    referenceLink: orderText,
+    requiredDocuments: orderText,
+
+    supplierName: orderText,
+    supplier1: orderText,
+    supplier2: orderText,
+    supplier3: orderText,
+  })
+  .refine((v) => !needsExistingSample(v.requestType) || Boolean(v.existingSampleId), {
+    path: ["existingSampleId"],
+    error: "Choose the sample this request is for.",
+  });
