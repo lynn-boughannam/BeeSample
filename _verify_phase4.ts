@@ -239,6 +239,22 @@ async function main() {
     check("the last option warns before it ends the request",
       /isLastOption/.test(page), true);
 
+    // A decision that vanishes the moment it is made is not a record: CSS has to be able
+    // to look back at what they rejected, and at the documents they rejected it on.
+    check("reviewed work is queried without a status filter",
+      /suppliers: \{ some: \{ cssDecision: \{ in: \["APPROVED", "REJECTED"\] \} \} \}/.test(page), true);
+    check("so a fully rejected request still appears",
+      /longer pending anything/.test(page), true);
+    check("there is a reviewed section", /Reviewed\{" "\}/.test(page), true);
+    check("the reason is shown with the decision", /supplier\.cssNote/.test(page), true);
+    check("and who decided it, and when", /cssDecidedBy\?\.name/.test(page), true);
+    check("the whole-request rejection reason is shown too",
+      /order\.rejectionReason/.test(page), true);
+    check("documents stay reachable after a decision",
+      /Documents stay reachable after a decision/.test(page), true);
+    check("a request half-decided isn't listed twice",
+      /pendingIds\.has\(o\.id\)/.test(page), true);
+
     const nav = readFileSync("src/lib/nav.ts", "utf8");
     check("CSS has a nav entry", /key: "css-review".*roles: \["ADMIN", "CSS"\]/.test(nav), true);
     const dash = readFileSync("src/app/(app)/dashboard/page.tsx", "utf8");
