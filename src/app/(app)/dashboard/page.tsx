@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { AdminDashboard } from "./admin-dashboard";
@@ -118,17 +119,17 @@ export default async function DashboardPage() {
   // The sample order workflow roles have no screens yet — their phases come later. A
   // placeholder is deliberate: dropping them into the Formulator dashboard would show
   // them someone else's view of the data and read as a bug.
-  if (role === "SUPPLY_CHAIN" || role === "CSS") {
-    return <WorkflowRolePlaceholder role={role} name={session.user.name ?? "there"} />;
+  // Supply Chain has a real screen now (Phase 2); CSS still doesn't.
+  if (role === "SUPPLY_CHAIN") redirect("/supply-chain");
+  if (role === "CSS") {
+    return <WorkflowRolePlaceholder name={session.user.name ?? "there"} />;
   }
   return <FormulatorDashboard userId={session.user.id} />;
 }
 
-function WorkflowRolePlaceholder({ role, name }: { role: "SUPPLY_CHAIN" | "CSS"; name: string }) {
-  const what =
-    role === "SUPPLY_CHAIN"
-      ? "requesting documents from suppliers and recording what comes back"
-      : "reviewing supplier costing and recording an approve or reject decision";
+// Only CSS still lacks a screen — Supply Chain got theirs in Phase 2.
+function WorkflowRolePlaceholder({ name }: { name: string }) {
+  const what = "reviewing supplier costing and recording an approve or reject decision";
 
   return (
     <div className="max-w-2xl space-y-4">

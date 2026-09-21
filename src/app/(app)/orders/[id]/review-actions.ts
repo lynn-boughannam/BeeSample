@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { checkReviewAllowed, REVIEW_TARGET } from "@/lib/orders";
+import { checkReviewAllowed, orderSupplierNames, REVIEW_TARGET } from "@/lib/orders";
 import type { OrderStatus } from "@/lib/types";
 
 // Phase 1 — Admin review. Approve moves a request on to Supply Chain; Reject ends it.
@@ -19,7 +19,16 @@ async function decide(
 
   const order = await prisma.sampleOrder.findUnique({
     where: { id: orderId },
-    select: { id: true, status: true },
+    select: {
+      id: true,
+      status: true,
+      requestType: true,
+      supplierName: true,
+      supplier1: true,
+      supplier2: true,
+      supplier3: true,
+      _count: { select: { suppliers: true } },
+    },
   });
   if (!order) return { error: "That request no longer exists." };
 
@@ -29,17 +38,32 @@ async function decide(
   const allowed = checkReviewAllowed(order.status as OrderStatus);
   if (!allowed.ok) return { error: allowed.reason };
 
+  // Approval is where the supplier options stop being three text boxes on a form and
+  // become things Supply Chain works on one at a time: documents chased, prices quoted,
+  // a CSS decision recorded. Created here rather than at submission because a rejected
+  // request should leave no supplier rows behind.
+  const supplierRows =
+    decision === "APPROVE" && order._count.suppliers === 0 ? orderSupplierNames(order) : [];
+
   try {
-    await prisma.sampleOrder.update({
-      where: { id: orderId },
-      data: {
-        status: REVIEW_TARGET[decision],
-        approvedById: session.user.id,
-        decidedAt: new Date(),
-        // Cleared on approval so a reason left over from a previous draft can't linger on
-        // a request that wasn't rejected.
-        rejectionReason: decision === "REJECT" ? rejectionReason : null,
-      },
+    await prisma.$transaction(async (tx) => {
+      if (supplierRows.length > 0) {
+        await tx.sampleOrderSupplier.createMany({
+          data: supplierRows.map((s) => ({ orderId, ...s })),
+        });
+      }
+
+      await tx.sampleOrder.update({
+        where: { id: orderId },
+        data: {
+          status: REVIEW_TARGET[decision],
+          approvedById: session.user.id,
+          decidedAt: new Date(),
+          // Cleared on approval so a reason left over from a previous draft can't linger
+          // on a request that wasn't rejected.
+          rejectionReason: decision === "REJECT" ? rejectionReason : null,
+        },
+      });
     });
   } catch (error) {
     console.error("sample order review failed", error);
@@ -49,6 +73,7 @@ async function decide(
   revalidatePath("/orders");
   revalidatePath(`/orders/${orderId}`);
   revalidatePath("/dashboard");
+  revalidatePath("/supply-chain");
 
   return {
     ok:

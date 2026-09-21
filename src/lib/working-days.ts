@@ -100,3 +100,48 @@ export function supplierDocumentDueDate(requestedAt: Date): Date {
 export function cssReviewDueDate(submittedAt: Date): Date {
   return addWorkingDays(submittedAt, CSS_REVIEW_SLA_DAYS);
 }
+
+// The document SLA turns amber before it turns red, so a chase can happen while there is
+// still time to act. Day 5 of 7 leaves two working days.
+export const SUPPLIER_DOCUMENT_WARNING_DAYS = 5;
+
+export type SlaLevel = "NONE" | "WARNING" | "OVERDUE";
+
+/**
+ * How a supplier's outstanding document request is doing, counted in working days since it
+ * was made. `now` is injectable so the thresholds can be tested without waiting a week.
+ *
+ * Measured from the request rather than against the stored due date on purpose: the due
+ * date is a promise made to a supplier and is deliberately frozen, but the warning is about
+ * how long we have actually been waiting.
+ */
+export function supplierDocumentSlaLevel(
+  requestedAt: Date | null,
+  now: Date = new Date()
+): SlaLevel {
+  if (!requestedAt) return "NONE";
+  const elapsed = workingDaysBetween(requestedAt, now);
+  if (elapsed >= SUPPLIER_DOCUMENT_SLA_DAYS) return "OVERDUE";
+  if (elapsed >= SUPPLIER_DOCUMENT_WARNING_DAYS) return "WARNING";
+  return "NONE";
+}
+
+// Shared presentation, so a supplier row can't read amber on one screen and red on another
+// — the same rule the checkout warning follows in src/lib/stock.ts.
+export const SLA_TEXT_CLASS: Record<SlaLevel, string> = {
+  NONE: "text-neutral-dark/55",
+  WARNING: "font-medium text-warning",
+  OVERDUE: "font-semibold text-danger",
+};
+
+export const SLA_ROW_CLASS: Record<SlaLevel, string> = {
+  NONE: "",
+  WARNING: "border-l-4 border-l-warning bg-warning/[0.07]",
+  OVERDUE: "border-l-4 border-l-danger bg-danger/[0.06]",
+};
+
+export function slaLabel(level: SlaLevel, elapsedWorkingDays: number): string | null {
+  if (level === "OVERDUE") return `${elapsedWorkingDays} working days — overdue`;
+  if (level === "WARNING") return `${elapsedWorkingDays} working days`;
+  return null;
+}

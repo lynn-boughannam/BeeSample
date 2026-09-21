@@ -173,3 +173,45 @@ export function checkReviewAllowed(
   }
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2 — Supply Chain document requests
+// ---------------------------------------------------------------------------
+
+export function isAwaitingSupplyChain(status: OrderStatus): boolean {
+  return status === "APPROVED_PENDING_SUPPLY_CHAIN";
+}
+
+/**
+ * Whether a supplier on this request needs documents chased at all.
+ *
+ * A repeat order from the same source already has everything on file, so the step is
+ * skipped outright rather than opened and immediately closed — an SLA clock started for a
+ * document nobody is waiting on would be noise that trains people to ignore the real ones.
+ */
+export function needsDocumentRequest(type: OrderRequestType): boolean {
+  return type !== "EXISTING_SAME_SOURCE";
+}
+
+/**
+ * The supplier options on a request, in position order.
+ *
+ * A new material carries up to three; the two existing-sample types carry the single named
+ * supplier. Blank boxes are dropped, so positions reflect what was actually given.
+ */
+export function orderSupplierNames(order: {
+  requestType: string;
+  supplierName?: string | null;
+  supplier1?: string | null;
+  supplier2?: string | null;
+  supplier3?: string | null;
+}): Array<{ position: number; supplierName: string }> {
+  const raw = usesThreeSuppliers(order.requestType as OrderRequestType)
+    ? [order.supplier1, order.supplier2, order.supplier3]
+    : [order.supplierName];
+
+  return raw
+    .map((name) => (name ?? "").trim())
+    .filter(Boolean)
+    .map((supplierName, i) => ({ position: i + 1, supplierName }));
+}
