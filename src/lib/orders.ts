@@ -356,3 +356,21 @@ export function orderIsExhausted(suppliers: Array<{ cssDecision: string }>): boo
 export function survivingSuppliers<T extends { cssDecision: string }>(suppliers: T[]): T[] {
   return suppliers.filter((s) => s.cssDecision !== "REJECTED");
 }
+
+/**
+ * A supplier's stage, with `needsDocuments` derived from the request it belongs to.
+ *
+ * Prefer this over calling supplierStage() directly. The two screens that show a stage
+ * used to assemble its input by hand, and one of them forgot `needsDocuments` — so a
+ * repeat order read "awaiting documents" on the very page that said its documents were
+ * already on file and offered no way to attach any. Taking the order closes that gap.
+ */
+export function supplierStageForOrder(
+  order: { requestType: string },
+  supplier: Omit<Parameters<typeof supplierStage>[0], "needsDocuments">
+): SupplierStage {
+  return supplierStage({
+    ...supplier,
+    needsDocuments: needsDocumentRequest(order.requestType as OrderRequestType),
+  });
+}

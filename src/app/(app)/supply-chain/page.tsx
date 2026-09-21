@@ -8,7 +8,7 @@ import {
   SUPPLIER_STAGE_LABELS,
   needsDocumentRequest,
   orderLabel,
-  supplierStage,
+  supplierStageForOrder,
   type OrderRequestType,
   type SupplierStage,
 } from "@/lib/orders";
@@ -95,13 +95,12 @@ export default async function SupplyChainPage() {
       const due = order.decidedAt ? supplierDocumentDueDate(order.decidedAt) : null;
 
       return order.suppliers.map((supplier) => {
-        const stage = supplierStage({
+        const stage = supplierStageForOrder(order, {
           documentCount: supplier._count.documents,
           landedPrice: supplier.landedPrice,
           moq: supplier.moq,
           cssDecision: supplier.cssDecision,
           submittedToCssAt: supplier.submittedToCssAt,
-          needsDocuments: needsDocs,
         });
 
         // The document clock stops when the documents arrive — that is what it measures.

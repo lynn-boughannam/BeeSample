@@ -10,6 +10,7 @@ import {
   canSubmitSupplierToCss,
   readyForCssReview,
   supplierStage,
+  supplierStageForOrder,
 } from "./src/lib/orders";
 
 // Phase 3 — documents attached and priced. A supplier reaches "documents attached, pending
@@ -65,6 +66,17 @@ async function main() {
   check("no documents, no price -> awaiting pricing", sameSource(0, null, null), "AWAITING_PRICING");
   check("no documents but priced -> ready to send", sameSource(0, "12.50", "25 kg"), "READY_TO_SUBMIT");
   check("a new source still needs them", stageOf(0, "12.50", "25 kg"), "AWAITING_DOCUMENTS");
+
+  // The bug this guards against: the queue derived needsDocuments from the request and the
+  // detail page forgot to, so a repeat order read "awaiting documents" on the very page
+  // that said its documents were on file and offered no way to attach any.
+  const bare = { documentCount: 0, landedPrice: null, moq: null, cssDecision: "PENDING" };
+  check("the helper reads it off the request — same source",
+    supplierStageForOrder({ requestType: "EXISTING_SAME_SOURCE" }, bare), "AWAITING_PRICING");
+  check("the helper reads it off the request — new source",
+    supplierStageForOrder({ requestType: "EXISTING_NEW_SOURCE" }, bare), "AWAITING_DOCUMENTS");
+  check("the helper reads it off the request — new material",
+    supplierStageForOrder({ requestType: "NEW" }, bare), "AWAITING_DOCUMENTS");
 
   console.log("\n=== a CSS decision overrides the rest ===");
   check("approved", stageOf(2, "12.50", "25 kg", "APPROVED"), "CSS_APPROVED");
@@ -259,8 +271,17 @@ async function main() {
 
     // Both screens read the same derived stage, so a supplier can't look one way in the
     // queue and another on the request.
-    check("the queue shows the derived stage", /supplierStage\(\{/.test(queue), true);
-    check("the detail page shows the same one", /supplierStage\(\{/.test(detailSrc), true);
+    // Both screens go through the order-aware helper, so neither can forget an input the
+    // other supplies.
+    check("the queue derives the stage from the order",
+      /supplierStageForOrder\(order, \{/.test(queue), true);
+    check("the detail page uses the same helper",
+      /supplierStageForOrder\(order, \{/.test(detailSrc), true);
+    check("neither assembles it by hand",
+      /supplierStage\(\{/.test(queue) || /supplierStage\(\{/.test(detailSrc), false);
+    // A repeat order has no document deadline, so the detail page must not show one.
+    check("the detail page suppresses the document clock for a repeat order",
+      /skipsDocuments\s*\?\s*\("NONE" as const\)/.test(detailSrc), true);
     check("the pricing form lives on the request", /<PricingForm/.test(detailSrc), true);
     check("and not in the queue", /<PricingForm/.test(queue), false);
 

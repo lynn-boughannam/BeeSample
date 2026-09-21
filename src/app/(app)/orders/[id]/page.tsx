@@ -17,7 +17,7 @@ import {
   needsDocumentRequest,
   SUPPLIER_STAGE_LABELS,
   canEditSupplierSubmission,
-  supplierStage,
+  supplierStageForOrder,
   type OrderRequestType,
   type SupplierStage,
 } from "@/lib/orders";
@@ -290,16 +290,23 @@ export default async function OrderDetailPage({
           <ul className="space-y-3">
             {order.suppliers.map((s) => {
               // The clock runs from approval — when this landed with Supply Chain — and
-              // stops when the documents actually arrived.
+              // stops when the documents actually arrived. A repeat order has no clock at
+              // all: its paperwork is on file, so there is no deadline to show and nothing
+              // to go red about.
               const done = s.documentsReceivedAt;
-              const sla = supplierDocumentSlaLevel(order.decidedAt, done);
-              const slaText = slaLabel(
-                sla,
-                documentWorkingDaysElapsed(order.decidedAt, done),
-                Boolean(done)
-              );
-              const due = order.decidedAt ? supplierDocumentDueDate(order.decidedAt) : null;
-              const stage = supplierStage({
+              const sla = skipsDocuments
+                ? ("NONE" as const)
+                : supplierDocumentSlaLevel(order.decidedAt, done);
+              const slaText = skipsDocuments
+                ? null
+                : slaLabel(sla, documentWorkingDaysElapsed(order.decidedAt, done), Boolean(done));
+              const due =
+                !skipsDocuments && order.decidedAt
+                  ? supplierDocumentDueDate(order.decidedAt)
+                  : null;
+              // Takes the order, so "does this request need documents at all?" can't be
+              // forgotten here and disagree with the message below.
+              const stage = supplierStageForOrder(order, {
                 documentCount: s.documents.length,
                 landedPrice: s.landedPrice,
                 moq: s.moq,
