@@ -20,14 +20,15 @@ import {
 } from "@/lib/orders";
 import { ReviewPanel } from "./review-panel";
 import { approveOrder, rejectOrder } from "./review-actions";
-import { RequestDocumentsButton } from "../../supply-chain/request-button";
-import { requestSupplierDocuments } from "../../supply-chain/actions";
+import { DocumentPanel, type SupplierDocument } from "../../supply-chain/document-panel";
+import { attachSupplierDocuments, deleteSupplierDocument } from "../../supply-chain/actions";
 import {
   SLA_ROW_CLASS,
   SLA_TEXT_CLASS,
+  documentWorkingDaysElapsed,
   slaLabel,
+  supplierDocumentDueDate,
   supplierDocumentSlaLevel,
-  workingDaysBetween,
 } from "@/lib/working-days";
 
 // A submitted request is not a sample yet — it may never become one. This is where an
@@ -81,7 +82,17 @@ export default async function OrderDetailPage({
       suppliers: {
         orderBy: { position: "asc" },
         include: {
-          documents: { orderBy: { uploadedAt: "asc" } },
+          documents: {
+            orderBy: { uploadedAt: "asc" },
+            // Never select the bytes to render a list.
+            select: {
+              id: true,
+              fileName: true,
+              sizeBytes: true,
+              uploadedAt: true,
+              uploadedBy: { select: { name: true } },
+            },
+          },
           cssDecidedBy: { select: { name: true } },
         },
       },
@@ -264,15 +275,20 @@ export default async function OrderDetailPage({
         ) : (
           <ul className="space-y-3">
             {order.suppliers.map((s) => {
-              const sla = supplierDocumentSlaLevel(s.documentsRequestedAt);
-              const elapsed = s.documentsRequestedAt
-                ? workingDaysBetween(s.documentsRequestedAt, new Date())
-                : 0;
-              const slaText = slaLabel(sla, elapsed);
+              // The clock runs from approval — when this landed with Supply Chain — and
+              // stops when the documents actually arrived.
+              const done = s.documentsReceivedAt;
+              const sla = supplierDocumentSlaLevel(order.decidedAt, done);
+              const slaText = slaLabel(
+                sla,
+                documentWorkingDaysElapsed(order.decidedAt, done),
+                Boolean(done)
+              );
+              const due = order.decidedAt ? supplierDocumentDueDate(order.decidedAt) : null;
               return (
               <li
                 key={s.id}
-                className={`rounded-md border p-4 ${SLA_ROW_CLASS[sla]} ${
+                className={`rounded-md border p-4 ${done ? "" : SLA_ROW_CLASS[sla]} ${
                   s.isSelected ? "border-brand-secondary bg-brand-primary/[0.06]" : "border-neutral-dark/15"
                 }`}
               >
@@ -296,15 +312,16 @@ export default async function OrderDetailPage({
                     {s.documentsRequestedAt ? day(s.documentsRequestedAt) : <Missing />}
                   </Field>
                   <Field label="Docs due">
-                    {s.documentsDueAt ? (
-                      <span className={SLA_TEXT_CLASS[sla]}>
-                        {day(s.documentsDueAt)}
+                    {due ? (
+                      <span className={done ? "" : SLA_TEXT_CLASS[sla]}>
+                        {day(due)}
                         {slaText ? ` · ${slaText}` : ""}
                       </span>
                     ) : (
                       <Missing />
                     )}
                   </Field>
+                  <Field label="Docs in">{done ? day(done) : <Missing />}</Field>
                   <Field label="CSS decided">
                     {s.cssDecisionAt ? day(s.cssDecisionAt) : <Missing />}
                   </Field>
@@ -315,28 +332,31 @@ export default async function OrderDetailPage({
                   <p className="text-caption mt-2 text-neutral-dark/70">{s.cssNote}</p>
                 )}
 
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-caption text-neutral-dark/60">
-                    {s.documents.length === 0
-                      ? "No documents attached yet."
-                      : `${s.documents.length} document${s.documents.length === 1 ? "" : "s"}: ${s.documents
-                          .map((d) => d.fileName)
-                          .join(", ")}`}
+                {/* Phase 2 — attaching sits with the details, so Samer reads what the
+                    material is before handling its paperwork. Several per supplier is
+                    normal: a COA and an SDS usually arrive together. */}
+                {skipsDocuments ? (
+                  <p className="text-caption mt-3 text-neutral-dark/60">
+                    No documents chased — same supplier as before.
                   </p>
-
-                  {/* Phase 2 — the action sits with the details, so Samer can read what
-                      the material is before asking a supplier for its paperwork. */}
-                  {isSupplyChain &&
-                    isAwaitingSupplyChain(status) &&
-                    !skipsDocuments &&
-                    !s.documentsRequestedAt && (
-                      <RequestDocumentsButton
-                        orderSupplierId={s.id}
-                        supplierName={s.supplierName}
-                        action={requestSupplierDocuments}
-                      />
+                ) : (
+                  <DocumentPanel
+                    orderSupplierId={s.id}
+                    supplierName={s.supplierName}
+                    documents={s.documents.map(
+                      (d): SupplierDocument => ({
+                        id: d.id,
+                        fileName: d.fileName,
+                        sizeBytes: d.sizeBytes,
+                        uploadedAt: day(d.uploadedAt),
+                        uploadedByName: d.uploadedBy?.name ?? null,
+                      })
                     )}
-                </div>
+                    canEdit={isSupplyChain && isAwaitingSupplyChain(status)}
+                    attachAction={attachSupplierDocuments}
+                    deleteAction={deleteSupplierDocument}
+                  />
+                )}
               </li>
               );
             })}

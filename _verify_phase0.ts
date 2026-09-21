@@ -155,7 +155,18 @@ async function main() {
           cost: "10.00",
           shippingCost: "2.50",
           cssDecision: position === 1 ? "APPROVED" : "PENDING",
-          documents: { create: [{ fileName: `quote-${position}.pdf`, uploadedById: admin.id }] },
+          documents: {
+            // content is required now that files live in the database (2026-09-21).
+            create: [
+              {
+                fileName: `quote-${position}.pdf`,
+                uploadedById: admin.id,
+                content: Buffer.from(`fake pdf ${position}`),
+                contentType: "application/pdf",
+                sizeBytes: 20,
+              },
+            ],
+          },
         })),
       },
     },

@@ -13,13 +13,14 @@ import {
 import {
   SLA_ROW_CLASS,
   SLA_TEXT_CLASS,
+  documentWorkingDaysElapsed,
   slaLabel,
+  supplierDocumentDueDate,
   supplierDocumentSlaLevel,
-  workingDaysBetween,
   SUPPLIER_DOCUMENT_SLA_DAYS,
 } from "@/lib/working-days";
-import { RequestDocumentsButton } from "./request-button";
-import { requestSupplierDocuments } from "./actions";
+import { DocumentPanel, type SupplierDocument } from "./document-panel";
+import { attachSupplierDocuments, deleteSupplierDocument } from "./actions";
 
 // Phase 2 — the Supply Chain queue. Approved requests, each with its supplier options and
 // what still needs chasing.
@@ -36,7 +37,22 @@ export default async function SupplyChainPage() {
     include: {
       orderedBy: { select: { name: true } },
       existingSample: { select: { sampleCode: true, rmName: true } },
-      suppliers: { orderBy: { position: "asc" } },
+      suppliers: {
+        orderBy: { position: "asc" },
+        include: {
+          documents: {
+            orderBy: { uploadedAt: "asc" },
+            // The bytes are never needed to render a list — only to stream one back.
+            select: {
+              id: true,
+              fileName: true,
+              sizeBytes: true,
+              uploadedAt: true,
+              uploadedBy: { select: { name: true } },
+            },
+          },
+        },
+      },
     },
     orderBy: { decidedAt: "asc" },
   });
@@ -48,8 +64,9 @@ export default async function SupplyChainPage() {
       <div>
         <h1 className="text-page-title text-neutral-dark">Supply chain queue</h1>
         <p className="text-body mt-1 text-neutral-dark/60">
-          Approved requests waiting on supplier documents. Logging a request starts a{" "}
-          {SUPPLIER_DOCUMENT_SLA_DAYS}-working-day clock on that supplier.
+          Approved requests waiting on supplier documents. The{" "}
+          {SUPPLIER_DOCUMENT_SLA_DAYS}-working-day clock starts when a request is approved,
+          and stops for a supplier once its documents are attached.
         </p>
       </div>
 
@@ -102,44 +119,55 @@ export default async function SupplyChainPage() {
               ) : (
                 <ul className="mt-3 divide-y divide-neutral-dark/8 rounded-md border border-neutral-dark/10">
                   {order.suppliers.map((supplier) => {
-                    const level = supplierDocumentSlaLevel(supplier.documentsRequestedAt, now);
-                    const elapsed = supplier.documentsRequestedAt
-                      ? workingDaysBetween(supplier.documentsRequestedAt, now)
-                      : 0;
-                    const label = slaLabel(level, elapsed);
+                    // The clock runs from approval — when this landed with Supply Chain —
+                    // and stops when the documents actually arrived.
+                    const done = supplier.documentsReceivedAt;
+                    const level = supplierDocumentSlaLevel(order.decidedAt, done, now);
+                    const elapsed = documentWorkingDaysElapsed(order.decidedAt, done, now);
+                    const label = slaLabel(level, elapsed, Boolean(done));
+                    const due = order.decidedAt ? supplierDocumentDueDate(order.decidedAt) : null;
+
+                    const docs: SupplierDocument[] = supplier.documents.map((d) => ({
+                      id: d.id,
+                      fileName: d.fileName,
+                      sizeBytes: d.sizeBytes,
+                      uploadedAt: day(d.uploadedAt),
+                      uploadedByName: d.uploadedBy?.name ?? null,
+                    }));
 
                     return (
                       <li
                         key={supplier.id}
-                        className={`flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-3 ${SLA_ROW_CLASS[level]}`}
+                        className={`px-3 py-3 ${done ? "" : SLA_ROW_CLASS[level]}`}
                       >
-                        <span className="text-caption text-neutral-dark/45">
-                          #{supplier.position}
-                        </span>
-                        <span className="text-body font-medium text-neutral-dark">
-                          {supplier.supplierName}
-                        </span>
-
-                        {supplier.documentsRequestedAt ? (
-                          <>
-                            <span className="text-caption text-neutral-dark/60">
-                              requested {day(supplier.documentsRequestedAt)}
-                            </span>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span className="text-caption text-neutral-dark/45">
+                            #{supplier.position}
+                          </span>
+                          <span className="text-body font-medium text-neutral-dark">
+                            {supplier.supplierName}
+                          </span>
+                          {done ? (
+                            <Badge variant="success">Documents in</Badge>
+                          ) : (
                             <span className={`text-caption ${SLA_TEXT_CLASS[level]}`}>
-                              due{" "}
-                              {supplier.documentsDueAt ? day(supplier.documentsDueAt) : "—"}
+                              due {due ? day(due) : "—"}
                               {label ? ` · ${label}` : ""}
                             </span>
-                          </>
-                        ) : (
-                          <span className="ml-auto">
-                            <RequestDocumentsButton
-                              orderSupplierId={supplier.id}
-                              supplierName={supplier.supplierName}
-                              action={requestSupplierDocuments}
-                            />
-                          </span>
-                        )}
+                          )}
+                          {done && label && (
+                            <span className="text-caption text-neutral-dark/55">{label}</span>
+                          )}
+                        </div>
+
+                        <DocumentPanel
+                          orderSupplierId={supplier.id}
+                          supplierName={supplier.supplierName}
+                          documents={docs}
+                          canEdit
+                          attachAction={attachSupplierDocuments}
+                          deleteAction={deleteSupplierDocument}
+                        />
                       </li>
                     );
                   })}

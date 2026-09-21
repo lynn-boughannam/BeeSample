@@ -215,3 +215,22 @@ export function orderSupplierNames(order: {
     .filter(Boolean)
     .map((supplierName, i) => ({ position: i + 1, supplierName }));
 }
+
+// Limits on supplier paperwork. Here rather than in the action because a "use server"
+// module may only export async functions, and the form needs these to describe itself.
+export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
+export const MAX_DOCUMENTS_PER_UPLOAD = 10;
+
+// A COA or SDS is a PDF, sometimes a scan or an office document. Anything else is very
+// likely a mistake, and refusing it on the way in is kinder than storing it and finding
+// out later.
+export const ALLOWED_DOCUMENT_TYPES: ReadonlySet<string> = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);

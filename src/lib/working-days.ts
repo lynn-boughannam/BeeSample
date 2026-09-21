@@ -108,22 +108,37 @@ export const SUPPLIER_DOCUMENT_WARNING_DAYS = 5;
 export type SlaLevel = "NONE" | "WARNING" | "OVERDUE";
 
 /**
- * How a supplier's outstanding document request is doing, counted in working days since it
- * was made. `now` is injectable so the thresholds can be tested without waiting a week.
+ * How a supplier's outstanding documents are doing against the SLA.
  *
- * Measured from the request rather than against the stored due date on purpose: the due
- * date is a promise made to a supplier and is deliberately frozen, but the warning is about
- * how long we have actually been waiting.
+ * The clock starts when the request reaches Supply Chain — its approval — not when Samer
+ * gets round to logging anything. An SLA that only starts once the person it measures
+ * chooses to start it cannot be missed, which makes it not an SLA.
+ *
+ * It stops for a supplier the moment that supplier's documents are attached. `now` is
+ * injectable so the thresholds can be tested without waiting a week.
  */
 export function supplierDocumentSlaLevel(
-  requestedAt: Date | null,
+  receivedAt: Date | null,
+  completedAt: Date | null = null,
   now: Date = new Date()
 ): SlaLevel {
-  if (!requestedAt) return "NONE";
-  const elapsed = workingDaysBetween(requestedAt, now);
+  if (!receivedAt) return "NONE";
+  // Documents in hand: judged on how long it took, not on how long ago that was.
+  const end = completedAt ?? now;
+  const elapsed = workingDaysBetween(receivedAt, end);
   if (elapsed >= SUPPLIER_DOCUMENT_SLA_DAYS) return "OVERDUE";
   if (elapsed >= SUPPLIER_DOCUMENT_WARNING_DAYS) return "WARNING";
   return "NONE";
+}
+
+// Working days a supplier's documents have been outstanding, or took to arrive.
+export function documentWorkingDaysElapsed(
+  receivedAt: Date | null,
+  completedAt: Date | null = null,
+  now: Date = new Date()
+): number {
+  if (!receivedAt) return 0;
+  return workingDaysBetween(receivedAt, completedAt ?? now);
 }
 
 // Shared presentation, so a supplier row can't read amber on one screen and red on another
@@ -140,8 +155,14 @@ export const SLA_ROW_CLASS: Record<SlaLevel, string> = {
   OVERDUE: "border-l-4 border-l-danger bg-danger/[0.06]",
 };
 
-export function slaLabel(level: SlaLevel, elapsedWorkingDays: number): string | null {
-  if (level === "OVERDUE") return `${elapsedWorkingDays} working days — overdue`;
-  if (level === "WARNING") return `${elapsedWorkingDays} working days`;
+export function slaLabel(
+  level: SlaLevel,
+  elapsedWorkingDays: number,
+  done = false
+): string | null {
+  const days = `${elapsedWorkingDays} working day${elapsedWorkingDays === 1 ? "" : "s"}`;
+  if (done) return `${days} to collect`;
+  if (level === "OVERDUE") return `${days} — overdue`;
+  if (level === "WARNING") return days;
   return null;
 }

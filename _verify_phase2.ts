@@ -179,15 +179,20 @@ async function main() {
     check("the order must actually be with Supply Chain",
       /isAwaitingSupplyChain/.test(action), true);
     check("a same-source request is refused", /needsDocumentRequest/.test(action), true);
-    check("re-requesting is refused so a deadline can't move",
-      /already requested/.test(action), true);
-    check("the due date is stored, not derived on read",
-      /documentsDueAt: supplierDocumentDueDate/.test(action), true);
-
+    check("re-recording a request is refused",
+      /Already recorded as requested/.test(action), true);
     const page = readFileSync("src/app/(app)/supply-chain/page.tsx", "utf8");
+    // The due date is now derived from the approval, not stamped when Samer logs
+    // something — the SLA is on him from the moment the request reaches him.
+    check("the due date comes off the approval, on both screens",
+      [page, readFileSync("src/app/(app)/orders/[id]/page.tsx", "utf8")]
+        .every((src) => /supplierDocumentDueDate\(order\.decidedAt\)/.test(src)), true);
+
     check("the queue is the approved orders",
       /status: "APPROVED_PENDING_SUPPLY_CHAIN"/.test(page), true);
     check("a skipped order says so visually", /No documents needed/.test(page), true);
+    check("the queue explains the clock starts at approval",
+      /clock starts when a request is approved/.test(page), true);
     check("rows are tinted by SLA level", /SLA_ROW_CLASS\[level\]/.test(page), true);
     check("overdue rows are red", /bg-danger/.test(SLA_ROW_CLASS.OVERDUE), true);
     check("warning rows are amber", /bg-warning/.test(SLA_ROW_CLASS.WARNING), true);
@@ -226,7 +231,8 @@ async function main() {
     check("a Formulator still only sees their own",
       /!worksOrders && order\.orderedById !== session\.user\.id/.test(detail), true);
     check("deciding stays Admin-only", /isAdmin && isAwaitingAdminReview\(status\)/.test(detail), true);
-    check("the request button sits with the details", /RequestDocumentsButton/.test(detail), true);
+    check("the attach panel sits with the details", /<DocumentPanel/.test(detail), true);
+    check("attaching is what closes the step", /attachSupplierDocuments/.test(detail), true);
 
     const nav = readFileSync("src/lib/nav.ts", "utf8");
     check("Supply Chain has a nav entry",

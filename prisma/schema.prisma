@@ -535,7 +535,11 @@ model SampleOrderSupplier {
   // The 7-working-day document SLA. dueDate is computed from requestedAt by
   // supplierDocumentDueDate() in src/lib/working-days.ts and stored, so a deadline agreed
   // with a supplier can't silently move if the working-day rule is ever changed.
+  // When Samer told the supplier. Informational — it is NOT what the SLA runs on.
   documentsRequestedAt DateTime?
+  // When the first document actually arrived. This is what stops the SLA clock for this
+  // supplier; the clock itself starts when the request was approved (2026-09-21).
+  documentsReceivedAt  DateTime?
   documentsDueAt       DateTime?
 
   // Quoted terms.
@@ -572,8 +576,10 @@ model SampleOrderSupplierDocument {
   orderSupplierId   String
   orderSupplier     SampleOrderSupplier @relation(fields: [orderSupplierId], references: [id], onDelete: Cascade)
   fileName          String
-  // Where the bytes live. Nullable because the upload mechanism is a later phase.
-  storagePath       String?
+  // The file itself. Kept in the database rather than on disk so supplier paperwork
+  // travels with the backups already taken and survives the app moving servers —
+  // decided 2026-09-21. These are COA/SDS PDFs at a few MB, not media.
+  content           Bytes
   contentType       String?
   sizeBytes         Int?
   uploadedById      String?
