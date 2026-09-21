@@ -25,6 +25,12 @@ Both mean the server is stale, not that the code is wrong. Stop it, delete `.nex
 start it again. If a page errors on a field you just added, check this before debugging
 anything else.
 
+`npm run dev` now refuses to start when `prisma/schema.prisma` is newer than the generated
+client (`scripts/check-prisma-client.mjs`), which catches the case where the schema was
+changed but `prisma generate` wasn't run. It cannot catch the more common one — schema
+changed and regenerated while the server keeps running — so **restart after every schema
+change regardless**. `npm run db:push` pushes, regenerates, and says so.
+
 ## SQL Server treats NULLs as equal in a UNIQUE constraint
 
 A nullable `@unique` column allows exactly **one** NULL row across the whole table, so the

@@ -8,10 +8,11 @@
     "start": "next start",
     "lint": "eslint",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push",
+    "db:push": "prisma db push && prisma generate && node -e \"console.log('\n  Schema pushed. Restart `next dev` \u2014 it does not watch the generated client.\n')\"",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "predev": "node scripts/check-prisma-client.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
