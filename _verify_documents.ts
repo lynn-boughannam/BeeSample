@@ -152,7 +152,11 @@ async function main() {
     check("delivered promptly would have been green",
       supplierDocumentSlaLevel(order.decidedAt, backWorkingDays(new Date(), 4)), "NONE");
     check("the queue stops tinting a row once documents are in",
-      /done \? "" : SLA_ROW_CLASS\[level\]/.test(sc), true);
+      /row\.documentsIn \? "" : SLA_ROW_CLASS\[row\.sla\]/.test(sc), true);
+    // The clock must key off the documents arriving, not off the later submission —
+    // otherwise a supplier reads overdue for paperwork already in hand.
+    check("and measures to the documents arriving",
+      /supplierDocumentSlaLevel\(order\.decidedAt, supplier\.documentsReceivedAt/.test(sc), true);
     check("so does the detail page",
       /done \? "" : SLA_ROW_CLASS\[sla\]/.test(detail), true);
 

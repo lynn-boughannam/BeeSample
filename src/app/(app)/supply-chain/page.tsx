@@ -5,11 +5,9 @@ import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import {
-  ORDER_REQUEST_TYPE_LABELS,
   SUPPLIER_STAGE_LABELS,
   needsDocumentRequest,
   orderLabel,
-  canEditSupplierSubmission,
   supplierStage,
   type OrderRequestType,
   type SupplierStage,
@@ -23,18 +21,16 @@ import {
   supplierDocumentSlaLevel,
   SUPPLIER_DOCUMENT_SLA_DAYS,
 } from "@/lib/working-days";
-import { DocumentPanel, type SupplierDocument } from "./document-panel";
-import { PricingForm } from "./pricing-form";
-import { SubmitToCssButton } from "./submit-button";
-import {
-  attachSupplierDocuments,
-  deleteSupplierDocument,
-  saveSupplierPricing,
-  submitSupplierToCss,
-} from "./actions";
 
-// Phase 2/3 — the Supply Chain queue. Approved requests, each with its supplier options,
-// what still needs chasing, and what each has quoted.
+// Phase 2/3 — the Supply Chain queue.
+//
+// One row per SUPPLIER, not per order: a request with three options is three separate
+// pieces of work, chased and priced independently, and folding them into one row would
+// make the count of outstanding work wrong.
+//
+// The columns are only what this job needs — what to ask for, from whom, by when, and what
+// has come back. A material's category, function, physical form and project belong to
+// formulation rather than procurement, and are one click away on the request itself.
 
 const STAGE_VARIANT: Record<SupplierStage, "neutral" | "warning" | "info" | "success" | "danger"> = {
   AWAITING_DOCUMENTS: "neutral",
@@ -45,6 +41,16 @@ const STAGE_VARIANT: Record<SupplierStage, "neutral" | "warning" | "info" | "suc
   CSS_REJECTED: "danger",
 };
 
+// Most pressing first: work still outstanding outranks work already sent, and within that
+// the longest-waiting comes first — the order someone would pick things up in anyway.
+const STAGE_URGENCY: Record<SupplierStage, number> = {
+  AWAITING_DOCUMENTS: 0,
+  AWAITING_PRICING: 1,
+  READY_TO_SUBMIT: 2,
+  PENDING_CSS: 3,
+  CSS_REJECTED: 4,
+  CSS_APPROVED: 5,
+};
 
 export default async function SupplyChainPage() {
   const session = await verifySession();
@@ -54,23 +60,27 @@ export default async function SupplyChainPage() {
 
   const orders = await prisma.sampleOrder.findMany({
     where: { status: "APPROVED_PENDING_SUPPLY_CHAIN" },
-    include: {
-      orderedBy: { select: { name: true } },
+    select: {
+      id: true,
+      requestType: true,
+      inciName: true,
+      decidedAt: true,
+      requiredQuantityG: true,
+      requiredDocuments: true,
       existingSample: { select: { sampleCode: true, rmName: true } },
       suppliers: {
         orderBy: { position: "asc" },
-        include: {
-          documents: {
-            orderBy: { uploadedAt: "asc" },
-            // The bytes are never needed to render a list — only to stream one back.
-            select: {
-              id: true,
-              fileName: true,
-              sizeBytes: true,
-              uploadedAt: true,
-              uploadedBy: { select: { name: true } },
-            },
-          },
+        select: {
+          id: true,
+          position: true,
+          supplierName: true,
+          landedPrice: true,
+          moq: true,
+          submittedToCssAt: true,
+          documentsReceivedAt: true,
+          cssDecision: true,
+          // A count, not the rows: nothing here needs a filename, let alone the bytes.
+          _count: { select: { documents: true } },
         },
       },
     },
@@ -79,161 +89,192 @@ export default async function SupplyChainPage() {
 
   const now = new Date();
 
+  const rows = orders
+    .flatMap((order) => {
+      const needsDocs = needsDocumentRequest(order.requestType as OrderRequestType);
+      const due = order.decidedAt ? supplierDocumentDueDate(order.decidedAt) : null;
+
+      return order.suppliers.map((supplier) => {
+        const stage = supplierStage({
+          documentCount: supplier._count.documents,
+          landedPrice: supplier.landedPrice,
+          moq: supplier.moq,
+          cssDecision: supplier.cssDecision,
+          submittedToCssAt: supplier.submittedToCssAt,
+          needsDocuments: needsDocs,
+        });
+
+        // The document clock stops when the documents arrive — that is what it measures.
+        // Not at submission: pricing is a separate step with no SLA of its own, and using
+        // it here would leave a supplier reading overdue for paperwork already in hand.
+        // A supplier whose paperwork is on file has no clock to run at all.
+        const sla = needsDocs
+          ? supplierDocumentSlaLevel(order.decidedAt, supplier.documentsReceivedAt, now)
+          : ("NONE" as const);
+        const elapsed = needsDocs
+          ? documentWorkingDaysElapsed(order.decidedAt, supplier.documentsReceivedAt, now)
+          : 0;
+
+        return {
+          key: supplier.id,
+          orderId: order.id,
+          label: orderLabel(order),
+          needsDocs,
+          position: supplier.position,
+          supplierName: supplier.supplierName,
+          documentCount: supplier._count.documents,
+          landedPrice: supplier.landedPrice?.toString() ?? null,
+          moq: supplier.moq,
+          requiredQuantityG: order.requiredQuantityG,
+          requiredDocuments: order.requiredDocuments,
+          stage,
+          sla,
+          due,
+          documentsIn: Boolean(supplier.documentsReceivedAt),
+          slaText: slaLabel(sla, elapsed, Boolean(supplier.documentsReceivedAt)),
+        };
+      });
+    })
+    .sort((a, b) => {
+      const byStage = STAGE_URGENCY[a.stage] - STAGE_URGENCY[b.stage];
+      if (byStage !== 0) return byStage;
+      // Oldest deadline first among equally urgent work.
+      const aDue = a.due?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const bDue = b.due?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      return aDue - bDue;
+    });
+
+  const outstanding = rows.filter((r) => r.stage !== "PENDING_CSS").length;
+
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="space-y-6">
       <div>
         <h1 className="text-page-title text-neutral-dark">Supply chain queue</h1>
         <p className="text-body mt-1 text-neutral-dark/60">
-          Approved requests waiting on supplier documents. The{" "}
-          {SUPPLIER_DOCUMENT_SLA_DAYS}-working-day clock starts when a request is approved,
-          and stops for a supplier once its documents are attached.
+          {rows.length === 0
+            ? "Nothing is waiting on Supply Chain."
+            : `${outstanding} of ${rows.length} supplier option${
+                rows.length === 1 ? "" : "s"
+              } still need work. The ${SUPPLIER_DOCUMENT_SLA_DAYS}-working-day clock starts when a request is approved.`}
         </p>
       </div>
 
-      {orders.length === 0 ? (
+      {rows.length === 0 ? (
         <section className="rounded-lg border border-neutral-dark/10 bg-white p-8 text-center shadow-elevated">
           <p className="text-body text-neutral-dark/60">Nothing is waiting on Supply Chain.</p>
           <p className="text-caption mt-1 text-neutral-dark/45">
-            Approved requests appear here for their supplier documents to be chased.
+            Approved requests appear here, one row per supplier option.
           </p>
         </section>
       ) : (
-        orders.map((order) => {
-          const skipsDocuments = !needsDocumentRequest(order.requestType as OrderRequestType);
-
-          return (
-            <section
-              key={order.id}
-              className="rounded-lg border border-neutral-dark/10 bg-white p-5 shadow-elevated"
-            >
-              <div className="flex flex-wrap items-baseline justify-between gap-3">
-                <div>
-                  <Link
-                    href={`/orders/${order.id}`}
-                    className="text-section-header text-neutral-dark hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
-                  >
-                    {orderLabel(order)}
-                  </Link>
-                  <p className="text-caption mt-0.5 text-neutral-dark/60">
-                    {ORDER_REQUEST_TYPE_LABELS[order.requestType as OrderRequestType]} · raised by{" "}
-                    {order.orderedBy.name}
-                    {order.decidedAt ? ` · approved ${day(order.decidedAt)}` : ""}
-                  </p>
-                </div>
-                {skipsDocuments && (
-                  <Badge variant="success">No documents needed</Badge>
-                )}
-              </div>
-
-              {/* A repeat order from the same source already has its paperwork, so the step
-                  is shown as skipped rather than offered and refused. */}
-              {skipsDocuments ? (
-                <p className="text-body mt-3 rounded-md border border-success/40 bg-success/10 px-3 py-2 text-on-success">
-                  Same supplier as before — documents are already on file. This request is
-                  ready for costing.
-                </p>
-              ) : order.suppliers.length === 0 ? (
-                <p className="text-body mt-3 text-neutral-dark/50">
-                  No supplier options were recorded on this request.
-                </p>
-              ) : (
-                <ul className="mt-3 divide-y divide-neutral-dark/8 rounded-md border border-neutral-dark/10">
-                  {order.suppliers.map((supplier) => {
-                    // The clock runs from approval — when this landed with Supply Chain —
-                    // and stops when the documents actually arrived.
-                    const done = supplier.documentsReceivedAt;
-                    const level = supplierDocumentSlaLevel(order.decidedAt, done, now);
-                    const elapsed = documentWorkingDaysElapsed(order.decidedAt, done, now);
-                    const label = slaLabel(level, elapsed, Boolean(done));
-                    const due = order.decidedAt ? supplierDocumentDueDate(order.decidedAt) : null;
-
-                    const stage = supplierStage({
-                      documentCount: supplier.documents.length,
-                      landedPrice: supplier.landedPrice,
-                      moq: supplier.moq,
-                      cssDecision: supplier.cssDecision,
-                      submittedToCssAt: supplier.submittedToCssAt,
-                    });
-                    // Locked the moment it goes to CSS: changing a quote underneath them
-                    // would make their decision about something that no longer exists.
-                    const editable = canEditSupplierSubmission(supplier);
-
-                    const docs: SupplierDocument[] = supplier.documents.map((d) => ({
-                      id: d.id,
-                      fileName: d.fileName,
-                      sizeBytes: d.sizeBytes,
-                      uploadedAt: day(d.uploadedAt),
-                      uploadedByName: d.uploadedBy?.name ?? null,
-                    }));
-
-                    return (
-                      <li
-                        key={supplier.id}
-                        className={`px-3 py-3 ${done ? "" : SLA_ROW_CLASS[level]}`}
+        <div className="overflow-x-auto rounded-lg border border-neutral-dark/10 bg-white shadow-elevated">
+          <table className="w-full min-w-[60rem] text-left">
+            <thead className="border-b border-neutral-dark/10 bg-neutral-dark/[0.02]">
+              <tr>
+                <Th>Request</Th>
+                <Th>Supplier</Th>
+                <Th>Stage</Th>
+                <Th numeric>Docs</Th>
+                <Th numeric>Landed price</Th>
+                <Th>MOQ</Th>
+                <Th>Asked for</Th>
+                <Th>Due</Th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-dark/8">
+              {rows.map((row) => (
+                <tr
+                  key={row.key}
+                  className={`transition-colors duration-150 hover:bg-neutral-dark/[0.02] ${
+                    row.documentsIn ? "" : SLA_ROW_CLASS[row.sla]
+                  }`}
+                >
+                  <Td>
+                    <Link
+                      href={`/orders/${row.orderId}`}
+                      className="text-body font-medium text-neutral-dark hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
+                    >
+                      {row.label}
+                    </Link>
+                  </Td>
+                  <Td>
+                    <span className="text-caption mr-1.5 text-neutral-dark/45">
+                      #{row.position}
+                    </span>
+                    <span className="text-body text-neutral-dark">{row.supplierName}</span>
+                  </Td>
+                  <Td>
+                    <Badge variant={STAGE_VARIANT[row.stage]}>
+                      {SUPPLIER_STAGE_LABELS[row.stage]}
+                    </Badge>
+                  </Td>
+                  <Td numeric>
+                    {row.needsDocs ? (
+                      <span
+                        className={
+                          row.documentCount === 0 ? "text-neutral-dark/35" : "text-neutral-dark"
+                        }
                       >
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <span className="text-caption text-neutral-dark/45">
-                            #{supplier.position}
-                          </span>
-                          <span className="text-body font-medium text-neutral-dark">
-                            {supplier.supplierName}
-                          </span>
-                          <Badge variant={STAGE_VARIANT[stage]}>
-                            {SUPPLIER_STAGE_LABELS[stage]}
-                          </Badge>
-                          {done ? null : (
-                            <span className={`text-caption ${SLA_TEXT_CLASS[level]}`}>
-                              due {due ? day(due) : "—"}
-                              {label ? ` · ${label}` : ""}
-                            </span>
-                          )}
-                          {done && label && (
-                            <span className="text-caption text-neutral-dark/55">{label}</span>
-                          )}
-                        </div>
-
-                        <DocumentPanel
-                          orderSupplierId={supplier.id}
-                          supplierName={supplier.supplierName}
-                          documents={docs}
-                          canEdit={editable}
-                          attachAction={attachSupplierDocuments}
-                          deleteAction={deleteSupplierDocument}
-                        />
-
-                        {/* Phase 3 — what this supplier quoted. Asked for alongside the
-                            documents, since CSS needs both to compare options. */}
-                        {editable ? (
-                          <>
-                            <PricingForm
-                              orderSupplierId={supplier.id}
-                              landedPrice={supplier.landedPrice?.toString() ?? ""}
-                              moq={supplier.moq ?? ""}
-                              action={saveSupplierPricing}
-                            />
-                            {stage === "READY_TO_SUBMIT" && (
-                              <SubmitToCssButton
-                                orderSupplierId={supplier.id}
-                                supplierName={supplier.supplierName}
-                                action={submitSupplierToCss}
-                              />
-                            )}
-                          </>
-                        ) : (
-                          <p className="text-caption mt-3 text-neutral-dark/60">
-                            {supplier.landedPrice?.toString() ?? "—"} · {supplier.moq ?? "—"} ·
-                            sent to CSS {supplier.submittedToCssAt ? day(supplier.submittedToCssAt) : ""}
-                          </p>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-          );
-        })
+                        {row.documentCount}
+                      </span>
+                    ) : (
+                      <span className="text-caption text-neutral-dark/45">on file</span>
+                    )}
+                  </Td>
+                  <Td numeric>{row.landedPrice ?? <Dash />}</Td>
+                  <Td>{row.moq || <Dash />}</Td>
+                  {/* What to go and ask for: how much, and which papers. */}
+                  <Td>
+                    <span className="text-caption text-neutral-dark/70">
+                      {row.requiredQuantityG ? `${row.requiredQuantityG} g` : "—"}
+                      {row.requiredDocuments ? ` · ${row.requiredDocuments}` : ""}
+                    </span>
+                  </Td>
+                  <Td>
+                    {row.needsDocs && row.due ? (
+                      <span className={`text-caption ${SLA_TEXT_CLASS[row.sla]}`}>
+                        {day(row.due)}
+                        {row.slaText ? ` · ${row.slaText}` : ""}
+                      </span>
+                    ) : (
+                      <Dash />
+                    )}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
+
+      <p className="text-caption text-neutral-dark/55">
+        Open a request to attach documents, enter a price and MOQ, or send a supplier to CSS.
+      </p>
     </div>
   );
+}
+
+function Th({ children, numeric }: { children: React.ReactNode; numeric?: boolean }) {
+  return (
+    <th
+      scope="col"
+      className={`text-caption px-4 py-2.5 font-semibold text-neutral-dark/60 ${
+        numeric ? "text-right" : ""
+      }`}
+    >
+      {children}
+    </th>
+  );
+}
+
+function Td({ children, numeric }: { children: React.ReactNode; numeric?: boolean }) {
+  return (
+    <td className={`text-body px-4 py-3 align-middle ${numeric ? "text-right tabular-nums" : ""}`}>
+      {children}
+    </td>
+  );
+}
+
+function Dash() {
+  return <span className="text-neutral-dark/30">—</span>;
 }

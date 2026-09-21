@@ -51,6 +51,21 @@ async function main() {
   check("the label is the one the brief names",
     SUPPLIER_STAGE_LABELS.PENDING_CSS, "Documents attached – pending CSS review");
 
+  console.log("\n=== a repeat order needs no documents to move on ===");
+  // Its paperwork is already on file, so requiring an attachment would leave it waiting
+  // for something nobody is going to send.
+  const sameSource = (docs: number, price: unknown, moq: string | null) =>
+    supplierStage({
+      documentCount: docs,
+      landedPrice: price,
+      moq,
+      cssDecision: "PENDING",
+      needsDocuments: false,
+    });
+  check("no documents, no price -> awaiting pricing", sameSource(0, null, null), "AWAITING_PRICING");
+  check("no documents but priced -> ready to send", sameSource(0, "12.50", "25 kg"), "READY_TO_SUBMIT");
+  check("a new source still needs them", stageOf(0, "12.50", "25 kg"), "AWAITING_DOCUMENTS");
+
   console.log("\n=== a CSS decision overrides the rest ===");
   check("approved", stageOf(2, "12.50", "25 kg", "APPROVED"), "CSS_APPROVED");
   check("rejected", stageOf(2, "12.50", "25 kg", "REJECTED"), "CSS_REJECTED");
@@ -214,26 +229,40 @@ async function main() {
     check("submitting re-checks readiness against the row",
       /canSubmitSupplierToCss\(\{/.test(action), true);
 
-    for (const [name, file] of [
-      ["queue", "src/app/(app)/supply-chain/page.tsx"],
-      ["detail", "src/app/(app)/orders/[id]/page.tsx"],
-    ] as const) {
-      const src = readFileSync(file, "utf8");
-      check(`${name} hides the forms once sent`, /canEditSupplierSubmission\(/.test(src), true);
-      check(`${name} offers the send button only when ready`,
-        /stage === "READY_TO_SUBMIT"/.test(src), true);
+    // Acting happens on the request, not in the queue — the queue is for scanning. So
+    // these are the detail page's job alone.
+    const detailSrc = readFileSync("src/app/(app)/orders/[id]/page.tsx", "utf8");
+    check("the detail page hides the forms once sent",
+      /canEditSupplierSubmission\(/.test(detailSrc), true);
+    check("it offers the send button only when ready",
+      /stage === "READY_TO_SUBMIT"/.test(detailSrc), true);
+
+    console.log("\n=== the queue is a table of what this job needs ===");
+    const queue = readFileSync("src/app/(app)/supply-chain/page.tsx", "utf8");
+    check("it renders a table", /<table/.test(queue), true);
+    check("one row per supplier, not per order", /flatMap\(\(order\)/.test(queue), true);
+    for (const col of ["Request", "Supplier", "Stage", "Docs", "Landed price", "MOQ", "Asked for", "Due"]) {
+      check(`column: ${col}`, new RegExp(`<Th[^>]*>${col}<`).test(queue), true);
     }
+    // Formulation detail belongs on the request, not in a procurement worklist.
+    for (const noise of ["Physical form", "Fragrance orientation", "Dosage", "Application"]) {
+      check(`not shown: ${noise}`, queue.includes(`>${noise}<`), false);
+    }
+    check("it never loads document bytes", /content: true/.test(queue), false);
+    check("a same-source row is told its documents are on file", /on file/.test(queue), true);
+    check("outstanding work sorts above work already sent",
+      /STAGE_URGENCY/.test(queue), true);
+    check("acting happens on the request", /Open a request to attach documents/.test(queue), true);
+
     const submitBtn = readFileSync("src/app/(app)/supply-chain/submit-button.tsx", "utf8");
     check("sending asks for confirmation", /can&apos;t be changed after this/.test(submitBtn), true);
 
-    for (const [name, file] of [
-      ["queue", "src/app/(app)/supply-chain/page.tsx"],
-      ["detail", "src/app/(app)/orders/[id]/page.tsx"],
-    ] as const) {
-      const src = readFileSync(file, "utf8");
-      check(`${name} shows the derived stage`, /supplierStage\(\{/.test(src), true);
-      check(`${name} offers the pricing form`, /<PricingForm/.test(src), true);
-    }
+    // Both screens read the same derived stage, so a supplier can't look one way in the
+    // queue and another on the request.
+    check("the queue shows the derived stage", /supplierStage\(\{/.test(queue), true);
+    check("the detail page shows the same one", /supplierStage\(\{/.test(detailSrc), true);
+    check("the pricing form lives on the request", /<PricingForm/.test(detailSrc), true);
+    check("and not in the queue", /<PricingForm/.test(queue), false);
 
     const form = readFileSync("src/app/(app)/supply-chain/pricing-form.tsx", "utf8");
     check("the form asks for both together",

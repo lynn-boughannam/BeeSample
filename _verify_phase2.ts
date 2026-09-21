@@ -190,10 +190,12 @@ async function main() {
 
     check("the queue is the approved orders",
       /status: "APPROVED_PENDING_SUPPLY_CHAIN"/.test(page), true);
-    check("a skipped order says so visually", /No documents needed/.test(page), true);
+    // The queue is a table now: a same-source row says "on file" in its Docs column
+    // rather than carrying a badge.
+    check("a skipped row says its documents are on file", /on file/.test(page), true);
     check("the queue explains the clock starts at approval",
       /clock starts when a request is approved/.test(page), true);
-    check("rows are tinted by SLA level", /SLA_ROW_CLASS\[level\]/.test(page), true);
+    check("rows are tinted by SLA level", /SLA_ROW_CLASS\[row\.sla\]/.test(page), true);
     check("overdue rows are red", /bg-danger/.test(SLA_ROW_CLASS.OVERDUE), true);
     check("warning rows are amber", /bg-warning/.test(SLA_ROW_CLASS.WARNING), true);
     check("a healthy row is untinted", SLA_ROW_CLASS.NONE, "");

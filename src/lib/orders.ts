@@ -276,13 +276,19 @@ export function supplierStage(supplier: {
   moq: string | null;
   cssDecision: string;
   submittedToCssAt?: Date | null;
+  // False for a repeat order from the same source, whose paperwork is already on file.
+  // Without this such a supplier would sit at "awaiting documents" forever, waiting for
+  // something nobody is going to send.
+  needsDocuments?: boolean;
 }): SupplierStage {
   if (supplier.cssDecision === "APPROVED") return "CSS_APPROVED";
   if (supplier.cssDecision === "REJECTED") return "CSS_REJECTED";
   // Submitted is the point of no return, so it is checked before the field-completeness
   // rules below — a submitted supplier stays submitted.
   if (supplier.submittedToCssAt) return "PENDING_CSS";
-  if (supplier.documentCount === 0) return "AWAITING_DOCUMENTS";
+  if ((supplier.needsDocuments ?? true) && supplier.documentCount === 0) {
+    return "AWAITING_DOCUMENTS";
+  }
   // Both are needed before CSS has anything to review: a quote without an MOQ can't be
   // compared against one that has it.
   if (supplier.landedPrice == null || !(supplier.moq ?? "").trim()) return "AWAITING_PRICING";
