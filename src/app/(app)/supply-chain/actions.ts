@@ -276,7 +276,7 @@ export async function submitSupplierToCss(
   const row = await prisma.sampleOrderSupplier.findUnique({
     where: { id: orderSupplierId },
     include: {
-      order: { select: { id: true, status: true } },
+      order: { select: { id: true, status: true, requestType: true } },
       _count: { select: { documents: true } },
     },
   });
@@ -289,7 +289,8 @@ export async function submitSupplierToCss(
   }
 
   // Re-checked against the row rather than trusted from the page, which could be stale.
-  const ready = canSubmitSupplierToCss({
+  // Takes the order, so a repeat order isn't held up waiting for paperwork it already has.
+  const ready = canSubmitSupplierToCss(row.order, {
     documentCount: row._count.documents,
     landedPrice: row.landedPrice,
     moq: row.moq,
@@ -297,9 +298,10 @@ export async function submitSupplierToCss(
     submittedToCssAt: row.submittedToCssAt,
   });
   if (!ready) {
-    return {
-      error: `${row.supplierName} still needs its documents, landed price and MOQ before CSS can review it.`,
-    };
+    const missing = needsDocumentRequest(row.order.requestType as OrderRequestType)
+      ? "its documents, landed price and MOQ"
+      : "its landed price and MOQ";
+    return { error: `${row.supplierName} still needs ${missing} before CSS can review it.` };
   }
 
   try {

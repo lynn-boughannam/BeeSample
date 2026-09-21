@@ -35,8 +35,17 @@ const stageOf = (
   price: unknown,
   moq: string | null,
   css = "PENDING",
-  submittedToCssAt: Date | null = null
-) => supplierStage({ documentCount: docs, landedPrice: price, moq, cssDecision: css, submittedToCssAt });
+  submittedToCssAt: Date | null = null,
+  needsDocuments = true
+) =>
+  supplierStage({
+    documentCount: docs,
+    landedPrice: price,
+    moq,
+    cssDecision: css,
+    submittedToCssAt,
+    needsDocuments,
+  });
 
 async function main() {
   console.log("=== a supplier only reaches CSS with both halves in ===");
@@ -89,15 +98,15 @@ async function main() {
   // "Ready for CSS" now means sent, not merely fillable — the submit is what hands it over.
   const sentAt = new Date();
   const ready = [
-    { documentCount: 1, landedPrice: "1.00", moq: "1 kg", cssDecision: "PENDING", submittedToCssAt: sentAt },
-    { documentCount: 2, landedPrice: "2.00", moq: "2 kg", cssDecision: "PENDING", submittedToCssAt: sentAt },
+    { documentCount: 1, landedPrice: "1.00", moq: "1 kg", cssDecision: "PENDING", submittedToCssAt: sentAt, needsDocuments: true },
+    { documentCount: 2, landedPrice: "2.00", moq: "2 kg", cssDecision: "PENDING", submittedToCssAt: sentAt, needsDocuments: true },
   ];
   check("all suppliers sent", readyForCssReview(ready), true);
   check("filled in but unsent isn't with CSS",
-    readyForCssReview([{ documentCount: 1, landedPrice: "1.00", moq: "1 kg", cssDecision: "PENDING" }]),
+    readyForCssReview([{ documentCount: 1, landedPrice: "1.00", moq: "1 kg", cssDecision: "PENDING", needsDocuments: true }]),
     false);
   check("one lagging holds it back",
-    readyForCssReview([...ready, { documentCount: 0, landedPrice: null, moq: null, cssDecision: "PENDING" }]),
+    readyForCssReview([...ready, { documentCount: 0, landedPrice: null, moq: null, cssDecision: "PENDING", needsDocuments: true }]),
     false);
   check("no suppliers at all isn't ready", readyForCssReview([]), false);
 
@@ -123,13 +132,17 @@ async function main() {
     });
     return {
       row,
-      stage: supplierStage({
-        documentCount: row.documents.length,
-        landedPrice: row.landedPrice,
-        moq: row.moq,
-        cssDecision: row.cssDecision,
-        submittedToCssAt: row.submittedToCssAt,
-      }),
+      // A NEW request, so documents genuinely apply.
+      stage: supplierStageForOrder(
+        { requestType: "NEW" },
+        {
+          documentCount: row.documents.length,
+          landedPrice: row.landedPrice,
+          moq: row.moq,
+          cssDecision: row.cssDecision,
+          submittedToCssAt: row.submittedToCssAt,
+        }
+      ),
     };
   };
 
@@ -167,10 +180,11 @@ async function main() {
         moq: priced.row.moq,
         cssDecision: priced.row.cssDecision,
         submittedToCssAt: priced.row.submittedToCssAt,
+        needsDocuments: true,
       }]), false);
 
     console.log("\n--- sending it to CSS locks it ---");
-    check("it can be sent now", canSubmitSupplierToCss({
+    check("it can be sent now", canSubmitSupplierToCss({ requestType: "NEW" }, {
       documentCount: priced.row.documents.length,
       landedPrice: priced.row.landedPrice,
       moq: priced.row.moq,
@@ -186,7 +200,7 @@ async function main() {
     const sent = await reload();
     check("now pending CSS review", sent.stage, "PENDING_CSS");
     check("and no longer editable", canEditSupplierSubmission(sent.row), false);
-    check("it can't be sent twice", canSubmitSupplierToCss({
+    check("it can't be sent twice", canSubmitSupplierToCss({ requestType: "NEW" }, {
       documentCount: sent.row.documents.length,
       landedPrice: sent.row.landedPrice,
       moq: sent.row.moq,
@@ -203,6 +217,7 @@ async function main() {
         moq: sent.row.moq,
         cssDecision: sent.row.cssDecision,
         submittedToCssAt: sent.row.submittedToCssAt,
+        needsDocuments: true,
       }]), true);
 
     console.log("\n--- the file is retrievable ---");
@@ -239,7 +254,7 @@ async function main() {
       (action.match(/canEditSupplierSubmission/g) ?? []).length >= 4, true);
     check("submitting twice is refused", /has already been sent to CSS/.test(action), true);
     check("submitting re-checks readiness against the row",
-      /canSubmitSupplierToCss\(\{/.test(action), true);
+      /canSubmitSupplierToCss\(row\.order, \{/.test(action), true);
 
     // Acting happens on the request, not in the queue — the queue is for scanning. So
     // these are the detail page's job alone.
@@ -280,6 +295,25 @@ async function main() {
     check("neither assembles it by hand",
       /supplierStage\(\{/.test(queue) || /supplierStage\(\{/.test(detailSrc), false);
     // A repeat order has no document deadline, so the detail page must not show one.
+    // The bug bit three times because each caller re-derived this. needsDocuments is now
+    // required, so the compiler finds any caller that omits it — but assert the shape too,
+    // since a caller could still hardcode `true` and be wrong for a repeat order.
+    const actions = readFileSync("src/app/(app)/supply-chain/actions.ts", "utf8");
+    check("the submit action asks the order, not itself",
+      /canSubmitSupplierToCss\(row\.order,/.test(actions), true);
+    check("so it loads the request type", /requestType: true/.test(actions), true);
+    check("and says what is actually missing for a repeat order",
+      /its landed price and MOQ/.test(actions), true);
+    // No caller anywhere in src/ may hardcode the flag; they should take the order.
+    for (const file of [
+      "src/app/(app)/supply-chain/page.tsx",
+      "src/app/(app)/orders/[id]/page.tsx",
+      "src/app/(app)/supply-chain/actions.ts",
+    ]) {
+      check(`${file.split("/").pop()} doesn't hardcode needsDocuments`,
+        /needsDocuments:\s*(true|false)/.test(readFileSync(file, "utf8")), false);
+    }
+
     check("the detail page suppresses the document clock for a repeat order",
       /skipsDocuments\s*\?\s*\("NONE" as const\)/.test(detailSrc), true);
     check("the pricing form lives on the request", /<PricingForm/.test(detailSrc), true);

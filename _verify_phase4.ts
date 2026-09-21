@@ -166,7 +166,7 @@ async function main() {
       [...survives.suppliers, ...doomed.suppliers].every(isAwaitingCssReview), true);
     check("and read as pending CSS",
       supplierStage({
-        documentCount: 1, landedPrice: "11.00", moq: "25 kg",
+        documentCount: 1, landedPrice: "11.00", moq: "25 kg", needsDocuments: true,
         cssDecision: "PENDING", submittedToCssAt: survives.suppliers[0].submittedToCssAt,
       }), "PENDING_CSS");
 
@@ -182,7 +182,7 @@ async function main() {
     // It is eliminated, not handed back.
     check("it does not return to Supply Chain",
       supplierStage({
-        documentCount: 1, landedPrice: "11.00", moq: "25 kg",
+        documentCount: 1, landedPrice: "11.00", moq: "25 kg", needsDocuments: true,
         cssDecision: after1.suppliers[0].cssDecision,
         submittedToCssAt: after1.suppliers[0].submittedToCssAt,
       }), "CSS_REJECTED");

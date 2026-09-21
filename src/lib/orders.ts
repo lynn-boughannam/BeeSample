@@ -276,17 +276,22 @@ export function supplierStage(supplier: {
   moq: string | null;
   cssDecision: string;
   submittedToCssAt?: Date | null;
-  // False for a repeat order from the same source, whose paperwork is already on file.
-  // Without this such a supplier would sit at "awaiting documents" forever, waiting for
+  // False for a repeat order from the same source, whose paperwork is already on file:
+  // such a supplier would otherwise sit at "awaiting documents" forever, waiting for
   // something nobody is going to send.
-  needsDocuments?: boolean;
+  //
+  // REQUIRED on purpose. It was optional and defaulted to true, and three separate
+  // callers forgot it — each one silently answering as though documents were needed.
+  // Required, the compiler finds them. Callers with the order in hand should use
+  // supplierStageForOrder() below rather than working this out themselves.
+  needsDocuments: boolean;
 }): SupplierStage {
   if (supplier.cssDecision === "APPROVED") return "CSS_APPROVED";
   if (supplier.cssDecision === "REJECTED") return "CSS_REJECTED";
   // Submitted is the point of no return, so it is checked before the field-completeness
   // rules below — a submitted supplier stays submitted.
   if (supplier.submittedToCssAt) return "PENDING_CSS";
-  if ((supplier.needsDocuments ?? true) && supplier.documentCount === 0) {
+  if (supplier.needsDocuments && supplier.documentCount === 0) {
     return "AWAITING_DOCUMENTS";
   }
   // Both are needed before CSS has anything to review: a quote without an MOQ can't be
@@ -304,10 +309,13 @@ export function canEditSupplierSubmission(supplier: {
   return !supplier.submittedToCssAt;
 }
 
+// Takes the order for the same reason supplierStageForOrder does: whether documents are
+// needed is a property of the request, not something each caller should re-derive.
 export function canSubmitSupplierToCss(
-  supplier: Parameters<typeof supplierStage>[0]
+  order: { requestType: string },
+  supplier: Omit<Parameters<typeof supplierStage>[0], "needsDocuments">
 ): boolean {
-  return supplierStage(supplier) === "READY_TO_SUBMIT";
+  return supplierStageForOrder(order, supplier) === "READY_TO_SUBMIT";
 }
 
 // Ready to hand to CSS: every supplier that is going to be considered has its documents
