@@ -317,3 +317,42 @@ export function readyForCssReview(
 ): boolean {
   return suppliers.length > 0 && suppliers.every((s) => supplierStage(s) === "PENDING_CSS");
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4 — CSS review
+// ---------------------------------------------------------------------------
+
+export const CSS_DECISIONS = ["PENDING", "APPROVED", "REJECTED"] as const;
+export type CssDecisionValue = (typeof CSS_DECISIONS)[number];
+
+// On CSS's desk: handed over by Supply Chain and not yet decided.
+export function isAwaitingCssReview(supplier: {
+  submittedToCssAt?: Date | null;
+  cssDecision: string;
+}): boolean {
+  return Boolean(supplier.submittedToCssAt) && supplier.cssDecision === "PENDING";
+}
+
+// A decision is made once. Reversing one would change what a later step was based on.
+export function canRecordCssDecision(supplier: {
+  submittedToCssAt?: Date | null;
+  cssDecision: string;
+}): boolean {
+  return isAwaitingCssReview(supplier);
+}
+
+/**
+ * Whether every option on an order has been eliminated.
+ *
+ * A rejected supplier does not go back to Supply Chain — it is simply out. But an order
+ * whose every option is out has nowhere left to go, so it is rejected outright rather
+ * than sitting in a queue waiting for an option that will never come.
+ */
+export function orderIsExhausted(suppliers: Array<{ cssDecision: string }>): boolean {
+  return suppliers.length > 0 && suppliers.every((s) => s.cssDecision === "REJECTED");
+}
+
+// What is still live on an order: anything CSS hasn't eliminated.
+export function survivingSuppliers<T extends { cssDecision: string }>(suppliers: T[]): T[] {
+  return suppliers.filter((s) => s.cssDecision !== "REJECTED");
+}

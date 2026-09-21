@@ -22,6 +22,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "requests", label: "Sample Requests", href: "/requests", roles: ["ADMIN", "FORMULATOR"] },
   { key: "orders", label: "New Sample Orders", href: "/orders", roles: ["ADMIN", "FORMULATOR"] },
   { key: "supply-chain", label: "Supply Chain", href: "/supply-chain", roles: ["ADMIN", "SUPPLY_CHAIN"] },
+  { key: "css-review", label: "Costing Review", href: "/css-review", roles: ["ADMIN", "CSS"] },
   { key: "pending-feedback", label: "Pending Feedback", href: "/pending-feedback", roles: ["ADMIN"] },
   { key: "feedback", label: "Sample Feedback", href: "/feedback", roles: ["ADMIN", "FORMULATOR"] },
   { key: "reports", label: "Reports", href: "/reports", roles: ["ADMIN"] },

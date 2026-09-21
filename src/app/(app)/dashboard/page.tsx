@@ -119,31 +119,10 @@ export default async function DashboardPage() {
   // The sample order workflow roles have no screens yet — their phases come later. A
   // placeholder is deliberate: dropping them into the Formulator dashboard would show
   // them someone else's view of the data and read as a bug.
-  // Supply Chain has a real screen now (Phase 2); CSS still doesn't.
+  // Both order-workflow roles have their own queue now, so each lands on its own work.
   if (role === "SUPPLY_CHAIN") redirect("/supply-chain");
-  if (role === "CSS") {
-    return <WorkflowRolePlaceholder name={session.user.name ?? "there"} />;
-  }
+  if (role === "CSS") redirect("/css-review");
   return <FormulatorDashboard userId={session.user.id} />;
-}
-
-// Only CSS still lacks a screen — Supply Chain got theirs in Phase 2.
-function WorkflowRolePlaceholder({ name }: { name: string }) {
-  const what = "reviewing supplier costing and recording an approve or reject decision";
-
-  return (
-    <div className="max-w-2xl space-y-4">
-      <h1 className="text-page-title text-neutral-dark">Dashboard</h1>
-      <section className="rounded-lg border border-neutral-dark/10 bg-white p-8 shadow-elevated">
-        <p className="text-body text-neutral-dark">
-          Signed in as {name}. Your role is set up and working.
-        </p>
-        <p className="text-body mt-3 text-neutral-dark/70">
-          The screens for {what} are being built. Nothing is waiting on you here yet.
-        </p>
-      </section>
-    </div>
-  );
 }
 
 function StatCard({ label, value }: { label: string; value: number }) {

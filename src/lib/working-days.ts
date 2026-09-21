@@ -166,3 +166,33 @@ export function slaLabel(
   if (level === "WARNING") return days;
   return null;
 }
+
+// The CSS review SLA turns amber a day before it turns red, same shape as the document
+// one: day 2 of 3 still leaves a working day to act.
+export const CSS_REVIEW_WARNING_DAYS = 2;
+
+/**
+ * How a supplier's outstanding CSS review is doing, in working days since Supply Chain
+ * handed it over. Stops when a decision is recorded — and, like the document SLA, then
+ * keeps reporting how long it took rather than how long ago that was.
+ */
+export function cssReviewSlaLevel(
+  submittedAt: Date | null,
+  decidedAt: Date | null = null,
+  now: Date = new Date()
+): SlaLevel {
+  if (!submittedAt) return "NONE";
+  const elapsed = workingDaysBetween(submittedAt, decidedAt ?? now);
+  if (elapsed >= CSS_REVIEW_SLA_DAYS) return "OVERDUE";
+  if (elapsed >= CSS_REVIEW_WARNING_DAYS) return "WARNING";
+  return "NONE";
+}
+
+export function cssReviewWorkingDaysElapsed(
+  submittedAt: Date | null,
+  decidedAt: Date | null = null,
+  now: Date = new Date()
+): number {
+  if (!submittedAt) return 0;
+  return workingDaysBetween(submittedAt, decidedAt ?? now);
+}
