@@ -5,6 +5,8 @@ import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import {
   ALLOWED_DOCUMENT_TYPES,
+  canEditSupplierSubmission,
+  canSubmitSupplierToCss,
   MAX_DOCUMENTS_PER_UPLOAD,
   MAX_DOCUMENT_BYTES,
   MAX_UPLOAD_TOTAL_BYTES,
@@ -53,6 +55,9 @@ export async function attachSupplierDocuments(
     return {
       error: "This is a repeat order from the same source — its documents are already on file.",
     };
+  }
+  if (!canEditSupplierSubmission(row)) {
+    return { error: `${row.supplierName} has been sent to CSS and can no longer be changed.` };
   }
 
   // Several documents per supplier is the normal case, not the exception: a COA and an SDS
@@ -178,6 +183,9 @@ export async function deleteSupplierDocument(
   if (!isAwaitingSupplyChain(doc.orderSupplier.order.status as OrderStatus)) {
     return { error: "This request has moved on — its documents can no longer be changed." };
   }
+  if (!canEditSupplierSubmission(doc.orderSupplier)) {
+    return { error: "That supplier has been sent to CSS and can no longer be changed." };
+  }
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -226,6 +234,9 @@ export async function saveSupplierPricing(
   if (!isAwaitingSupplyChain(row.order.status as OrderStatus)) {
     return { error: "This request isn't with Supply Chain." };
   }
+  if (!canEditSupplierSubmission(row)) {
+    return { error: `${row.supplierName} has been sent to CSS and can no longer be repriced.` };
+  }
 
   if (!rawPrice) return { error: "Enter the landed price." };
   const price = Number(rawPrice);
@@ -249,4 +260,59 @@ export async function saveSupplierPricing(
   revalidatePath("/supply-chain");
   revalidatePath(`/orders/${row.order.id}`);
   return { ok: `Saved price and MOQ for ${row.supplierName}.` };
+}
+
+// Handing one supplier to CSS. An explicit step rather than something implied by the
+// fields being filled: Samer gets to check a price before committing to it, and this is
+// the point after which he can't.
+export async function submitSupplierToCss(
+  _prev: DocumentUploadState,
+  formData: FormData
+): Promise<DocumentUploadState> {
+  const session = await requireSupplyChain();
+  if (!session) return { error: "Only Supply Chain can send a supplier to CSS." };
+
+  const orderSupplierId = String(formData.get("orderSupplierId") ?? "");
+  const row = await prisma.sampleOrderSupplier.findUnique({
+    where: { id: orderSupplierId },
+    include: {
+      order: { select: { id: true, status: true } },
+      _count: { select: { documents: true } },
+    },
+  });
+  if (!row) return { error: "That supplier is no longer on the request." };
+  if (!isAwaitingSupplyChain(row.order.status as OrderStatus)) {
+    return { error: "This request isn't with Supply Chain." };
+  }
+  if (!canEditSupplierSubmission(row)) {
+    return { error: `${row.supplierName} has already been sent to CSS.` };
+  }
+
+  // Re-checked against the row rather than trusted from the page, which could be stale.
+  const ready = canSubmitSupplierToCss({
+    documentCount: row._count.documents,
+    landedPrice: row.landedPrice,
+    moq: row.moq,
+    cssDecision: row.cssDecision,
+    submittedToCssAt: row.submittedToCssAt,
+  });
+  if (!ready) {
+    return {
+      error: `${row.supplierName} still needs its documents, landed price and MOQ before CSS can review it.`,
+    };
+  }
+
+  try {
+    await prisma.sampleOrderSupplier.update({
+      where: { id: orderSupplierId },
+      data: { submittedToCssAt: new Date() },
+    });
+  } catch (error) {
+    console.error("submitSupplierToCss failed", error);
+    return { error: "Could not send that to CSS. Try again." };
+  }
+
+  revalidatePath("/supply-chain");
+  revalidatePath(`/orders/${row.order.id}`);
+  return { ok: `${row.supplierName} sent to CSS. Its documents and pricing are now locked.` };
 }

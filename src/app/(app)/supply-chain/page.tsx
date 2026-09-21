@@ -9,6 +9,7 @@ import {
   SUPPLIER_STAGE_LABELS,
   needsDocumentRequest,
   orderLabel,
+  canEditSupplierSubmission,
   supplierStage,
   type OrderRequestType,
   type SupplierStage,
@@ -24,7 +25,13 @@ import {
 } from "@/lib/working-days";
 import { DocumentPanel, type SupplierDocument } from "./document-panel";
 import { PricingForm } from "./pricing-form";
-import { attachSupplierDocuments, deleteSupplierDocument, saveSupplierPricing } from "./actions";
+import { SubmitToCssButton } from "./submit-button";
+import {
+  attachSupplierDocuments,
+  deleteSupplierDocument,
+  saveSupplierPricing,
+  submitSupplierToCss,
+} from "./actions";
 
 // Phase 2/3 — the Supply Chain queue. Approved requests, each with its supplier options,
 // what still needs chasing, and what each has quoted.
@@ -32,6 +39,7 @@ import { attachSupplierDocuments, deleteSupplierDocument, saveSupplierPricing } 
 const STAGE_VARIANT: Record<SupplierStage, "neutral" | "warning" | "info" | "success" | "danger"> = {
   AWAITING_DOCUMENTS: "neutral",
   AWAITING_PRICING: "warning",
+  READY_TO_SUBMIT: "warning",
   PENDING_CSS: "info",
   CSS_APPROVED: "success",
   CSS_REJECTED: "danger",
@@ -144,7 +152,11 @@ export default async function SupplyChainPage() {
                       landedPrice: supplier.landedPrice,
                       moq: supplier.moq,
                       cssDecision: supplier.cssDecision,
+                      submittedToCssAt: supplier.submittedToCssAt,
                     });
+                    // Locked the moment it goes to CSS: changing a quote underneath them
+                    // would make their decision about something that no longer exists.
+                    const editable = canEditSupplierSubmission(supplier);
 
                     const docs: SupplierDocument[] = supplier.documents.map((d) => ({
                       id: d.id,
@@ -184,19 +196,35 @@ export default async function SupplyChainPage() {
                           orderSupplierId={supplier.id}
                           supplierName={supplier.supplierName}
                           documents={docs}
-                          canEdit
+                          canEdit={editable}
                           attachAction={attachSupplierDocuments}
                           deleteAction={deleteSupplierDocument}
                         />
 
                         {/* Phase 3 — what this supplier quoted. Asked for alongside the
                             documents, since CSS needs both to compare options. */}
-                        <PricingForm
-                          orderSupplierId={supplier.id}
-                          landedPrice={supplier.landedPrice?.toString() ?? ""}
-                          moq={supplier.moq ?? ""}
-                          action={saveSupplierPricing}
-                        />
+                        {editable ? (
+                          <>
+                            <PricingForm
+                              orderSupplierId={supplier.id}
+                              landedPrice={supplier.landedPrice?.toString() ?? ""}
+                              moq={supplier.moq ?? ""}
+                              action={saveSupplierPricing}
+                            />
+                            {stage === "READY_TO_SUBMIT" && (
+                              <SubmitToCssButton
+                                orderSupplierId={supplier.id}
+                                supplierName={supplier.supplierName}
+                                action={submitSupplierToCss}
+                              />
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-caption mt-3 text-neutral-dark/60">
+                            {supplier.landedPrice?.toString() ?? "—"} · {supplier.moq ?? "—"} ·
+                            sent to CSS {supplier.submittedToCssAt ? day(supplier.submittedToCssAt) : ""}
+                          </p>
+                        )}
                       </li>
                     );
                   })}

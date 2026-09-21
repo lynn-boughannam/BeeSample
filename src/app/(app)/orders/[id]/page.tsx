@@ -16,6 +16,7 @@ import {
   isAwaitingSupplyChain,
   needsDocumentRequest,
   SUPPLIER_STAGE_LABELS,
+  canEditSupplierSubmission,
   supplierStage,
   type OrderRequestType,
   type SupplierStage,
@@ -24,10 +25,12 @@ import { ReviewPanel } from "./review-panel";
 import { approveOrder, rejectOrder } from "./review-actions";
 import { DocumentPanel, type SupplierDocument } from "../../supply-chain/document-panel";
 import { PricingForm } from "../../supply-chain/pricing-form";
+import { SubmitToCssButton } from "../../supply-chain/submit-button";
 import {
   attachSupplierDocuments,
   deleteSupplierDocument,
   saveSupplierPricing,
+  submitSupplierToCss,
 } from "../../supply-chain/actions";
 import {
   SLA_ROW_CLASS,
@@ -57,6 +60,7 @@ const STATUS_VARIANT: Record<OrderStatus, "info" | "success" | "danger" | "warni
 const STAGE_VARIANT: Record<SupplierStage, "neutral" | "warning" | "info" | "success" | "danger"> = {
   AWAITING_DOCUMENTS: "neutral",
   AWAITING_PRICING: "warning",
+  READY_TO_SUBMIT: "warning",
   PENDING_CSS: "info",
   CSS_APPROVED: "success",
   CSS_REJECTED: "danger",
@@ -300,7 +304,9 @@ export default async function OrderDetailPage({
                 landedPrice: s.landedPrice,
                 moq: s.moq,
                 cssDecision: s.cssDecision,
+                submittedToCssAt: s.submittedToCssAt,
               });
+              const editable = canEditSupplierSubmission(s);
               return (
               <li
                 key={s.id}
@@ -368,19 +374,33 @@ export default async function OrderDetailPage({
                         uploadedByName: d.uploadedBy?.name ?? null,
                       })
                     )}
-                    canEdit={isSupplyChain && isAwaitingSupplyChain(status)}
+                    canEdit={isSupplyChain && isAwaitingSupplyChain(status) && editable}
                     attachAction={attachSupplierDocuments}
                     deleteAction={deleteSupplierDocument}
                   />
                 )}
 
-                {isSupplyChain && isAwaitingSupplyChain(status) && (
-                  <PricingForm
-                    orderSupplierId={s.id}
-                    landedPrice={s.landedPrice?.toString() ?? ""}
-                    moq={s.moq ?? ""}
-                    action={saveSupplierPricing}
-                  />
+                {isSupplyChain && isAwaitingSupplyChain(status) && editable && (
+                  <>
+                    <PricingForm
+                      orderSupplierId={s.id}
+                      landedPrice={s.landedPrice?.toString() ?? ""}
+                      moq={s.moq ?? ""}
+                      action={saveSupplierPricing}
+                    />
+                    {stage === "READY_TO_SUBMIT" && (
+                      <SubmitToCssButton
+                        orderSupplierId={s.id}
+                        supplierName={s.supplierName}
+                        action={submitSupplierToCss}
+                      />
+                    )}
+                  </>
+                )}
+                {!editable && (
+                  <p className="text-caption mt-3 text-neutral-dark/60">
+                    Sent to CSS {s.submittedToCssAt ? day(s.submittedToCssAt) : ""} — locked.
+                  </p>
                 )}
               </li>
               );

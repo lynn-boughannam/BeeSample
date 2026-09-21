@@ -6,6 +6,8 @@ import { parseMssqlUrl } from "./src/lib/mssql-url";
 import {
   SUPPLIER_STAGES,
   SUPPLIER_STAGE_LABELS,
+  canEditSupplierSubmission,
+  canSubmitSupplierToCss,
   readyForCssReview,
   supplierStage,
 } from "./src/lib/orders";
@@ -27,8 +29,13 @@ const prisma = new PrismaClient({
   adapter: new PrismaMssql(parseMssqlUrl(process.env.DATABASE_URL!)),
 });
 
-const stageOf = (docs: number, price: unknown, moq: string | null, css = "PENDING") =>
-  supplierStage({ documentCount: docs, landedPrice: price, moq, cssDecision: css });
+const stageOf = (
+  docs: number,
+  price: unknown,
+  moq: string | null,
+  css = "PENDING",
+  submittedToCssAt: Date | null = null
+) => supplierStage({ documentCount: docs, landedPrice: price, moq, cssDecision: css, submittedToCssAt });
 
 async function main() {
   console.log("=== a supplier only reaches CSS with both halves in ===");
@@ -38,8 +45,9 @@ async function main() {
   check("documents and price but no MOQ", stageOf(2, "12.50", null), "AWAITING_PRICING");
   check("an MOQ of spaces doesn't count", stageOf(2, "12.50", "   "), "AWAITING_PRICING");
   check("documents and MOQ but no price", stageOf(2, null, "25 kg"), "AWAITING_PRICING");
-  check("both in -> pending CSS", stageOf(2, "12.50", "25 kg"), "PENDING_CSS");
-  check("a zero price still counts", stageOf(1, "0.00", "1 kg"), "PENDING_CSS");
+  check("both in -> ready to send", stageOf(2, "12.50", "25 kg"), "READY_TO_SUBMIT");
+  check("a zero price still counts", stageOf(1, "0.00", "1 kg"), "READY_TO_SUBMIT");
+  check("sent -> pending CSS", stageOf(2, "12.50", "25 kg", "PENDING", new Date()), "PENDING_CSS");
   check("the label is the one the brief names",
     SUPPLIER_STAGE_LABELS.PENDING_CSS, "Documents attached – pending CSS review");
 
@@ -51,11 +59,16 @@ async function main() {
     SUPPLIER_STAGES.every((st) => Boolean(SUPPLIER_STAGE_LABELS[st])), true);
 
   console.log("\n=== the order as a whole ===");
+  // "Ready for CSS" now means sent, not merely fillable — the submit is what hands it over.
+  const sentAt = new Date();
   const ready = [
-    { documentCount: 1, landedPrice: "1.00", moq: "1 kg", cssDecision: "PENDING" },
-    { documentCount: 2, landedPrice: "2.00", moq: "2 kg", cssDecision: "PENDING" },
+    { documentCount: 1, landedPrice: "1.00", moq: "1 kg", cssDecision: "PENDING", submittedToCssAt: sentAt },
+    { documentCount: 2, landedPrice: "2.00", moq: "2 kg", cssDecision: "PENDING", submittedToCssAt: sentAt },
   ];
-  check("all suppliers ready", readyForCssReview(ready), true);
+  check("all suppliers sent", readyForCssReview(ready), true);
+  check("filled in but unsent isn't with CSS",
+    readyForCssReview([{ documentCount: 1, landedPrice: "1.00", moq: "1 kg", cssDecision: "PENDING" }]),
+    false);
   check("one lagging holds it back",
     readyForCssReview([...ready, { documentCount: 0, landedPrice: null, moq: null, cssDecision: "PENDING" }]),
     false);
@@ -88,6 +101,7 @@ async function main() {
         landedPrice: row.landedPrice,
         moq: row.moq,
         cssDecision: row.cssDecision,
+        submittedToCssAt: row.submittedToCssAt,
       }),
     };
   };
@@ -118,13 +132,50 @@ async function main() {
     const priced = await reload();
     check("price stored exactly", priced.row.landedPrice?.toString(), "12.5");
     check("MOQ stored", priced.row.moq, "25 kg");
-    check("now pending CSS review", priced.stage, "PENDING_CSS");
-    check("the whole order is ready for CSS",
+    check("ready to send, not yet sent", priced.stage, "READY_TO_SUBMIT");
+    check("not yet with CSS — it hasn't been sent",
       readyForCssReview([{
         documentCount: priced.row.documents.length,
         landedPrice: priced.row.landedPrice,
         moq: priced.row.moq,
         cssDecision: priced.row.cssDecision,
+        submittedToCssAt: priced.row.submittedToCssAt,
+      }]), false);
+
+    console.log("\n--- sending it to CSS locks it ---");
+    check("it can be sent now", canSubmitSupplierToCss({
+      documentCount: priced.row.documents.length,
+      landedPrice: priced.row.landedPrice,
+      moq: priced.row.moq,
+      cssDecision: priced.row.cssDecision,
+      submittedToCssAt: priced.row.submittedToCssAt,
+    }), true);
+    check("and is editable until then", canEditSupplierSubmission(priced.row), true);
+
+    await prisma.sampleOrderSupplier.update({
+      where: { id: supplierId },
+      data: { submittedToCssAt: new Date() },
+    });
+    const sent = await reload();
+    check("now pending CSS review", sent.stage, "PENDING_CSS");
+    check("and no longer editable", canEditSupplierSubmission(sent.row), false);
+    check("it can't be sent twice", canSubmitSupplierToCss({
+      documentCount: sent.row.documents.length,
+      landedPrice: sent.row.landedPrice,
+      moq: sent.row.moq,
+      cssDecision: sent.row.cssDecision,
+      submittedToCssAt: sent.row.submittedToCssAt,
+    }), false);
+    // A submitted supplier stays submitted even if its documents were somehow removed.
+    check("submission outranks the field rules",
+      stageOf(0, null, null, "PENDING", sent.row.submittedToCssAt), "PENDING_CSS");
+    check("the order is now with CSS",
+      readyForCssReview([{
+        documentCount: sent.row.documents.length,
+        landedPrice: sent.row.landedPrice,
+        moq: sent.row.moq,
+        cssDecision: sent.row.cssDecision,
+        submittedToCssAt: sent.row.submittedToCssAt,
       }]), true);
 
     console.log("\n--- the file is retrievable ---");
@@ -136,7 +187,11 @@ async function main() {
       Buffer.from(fetched.content).toString(), "%PDF-1.4 coa.pdf");
     check("with its content type", fetched.contentType, "application/pdf");
 
-    console.log("\n--- removing the documents takes it back ---");
+    console.log("\n--- before submission, removing documents takes it back ---");
+    await prisma.sampleOrderSupplier.update({
+      where: { id: supplierId },
+      data: { submittedToCssAt: null },
+    });
     await prisma.sampleOrderSupplierDocument.deleteMany({ where: { orderSupplierId: supplierId } });
     check("back to awaiting documents, pricing kept", (await reload()).stage, "AWAITING_DOCUMENTS");
 
@@ -147,6 +202,29 @@ async function main() {
     check("a negative price is refused", /price < 0/.test(action), true);
     check("the exact figure is kept", /price\.toFixed\(2\)/.test(action), true);
     check("the order must be with Supply Chain", /isAwaitingSupplyChain/.test(action), true);
+
+    // The lock has to hold on the server, not just by hiding a form.
+    check("attaching is refused after submission",
+      /can no longer be changed/.test(action), true);
+    check("repricing is refused after submission",
+      /can no longer be repriced/.test(action), true);
+    check("deleting a document is refused after submission",
+      (action.match(/canEditSupplierSubmission/g) ?? []).length >= 4, true);
+    check("submitting twice is refused", /has already been sent to CSS/.test(action), true);
+    check("submitting re-checks readiness against the row",
+      /canSubmitSupplierToCss\(\{/.test(action), true);
+
+    for (const [name, file] of [
+      ["queue", "src/app/(app)/supply-chain/page.tsx"],
+      ["detail", "src/app/(app)/orders/[id]/page.tsx"],
+    ] as const) {
+      const src = readFileSync(file, "utf8");
+      check(`${name} hides the forms once sent`, /canEditSupplierSubmission\(/.test(src), true);
+      check(`${name} offers the send button only when ready`,
+        /stage === "READY_TO_SUBMIT"/.test(src), true);
+    }
+    const submitBtn = readFileSync("src/app/(app)/supply-chain/submit-button.tsx", "utf8");
+    check("sending asks for confirmation", /can&apos;t be changed after this/.test(submitBtn), true);
 
     for (const [name, file] of [
       ["queue", "src/app/(app)/supply-chain/page.tsx"],

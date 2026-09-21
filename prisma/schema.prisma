@@ -542,6 +542,11 @@ model SampleOrderSupplier {
   documentsReceivedAt  DateTime?
   documentsDueAt       DateTime?
 
+  // When Supply Chain handed this supplier to CSS. Set by an explicit submit, not implied
+  // by the fields being filled: Samer gets to check a price before committing to it, and
+  // once it is set his documents and pricing are locked (2026-09-21).
+  submittedToCssAt DateTime?
+
   // Quoted terms.
   landedPrice  Decimal? @db.Decimal(12, 2)
   moq          String?

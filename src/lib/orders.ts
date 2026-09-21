@@ -253,6 +253,7 @@ export const ALLOWED_DOCUMENT_TYPES: ReadonlySet<string> = new Set([
 export const SUPPLIER_STAGES = [
   "AWAITING_DOCUMENTS",
   "AWAITING_PRICING",
+  "READY_TO_SUBMIT",
   "PENDING_CSS",
   "CSS_APPROVED",
   "CSS_REJECTED",
@@ -263,6 +264,7 @@ export type SupplierStage = (typeof SUPPLIER_STAGES)[number];
 export const SUPPLIER_STAGE_LABELS: Record<SupplierStage, string> = {
   AWAITING_DOCUMENTS: "Awaiting documents",
   AWAITING_PRICING: "Awaiting price & MOQ",
+  READY_TO_SUBMIT: "Ready to send to CSS",
   PENDING_CSS: "Documents attached – pending CSS review",
   CSS_APPROVED: "CSS approved",
   CSS_REJECTED: "CSS rejected",
@@ -273,14 +275,33 @@ export function supplierStage(supplier: {
   landedPrice: unknown;
   moq: string | null;
   cssDecision: string;
+  submittedToCssAt?: Date | null;
 }): SupplierStage {
   if (supplier.cssDecision === "APPROVED") return "CSS_APPROVED";
   if (supplier.cssDecision === "REJECTED") return "CSS_REJECTED";
+  // Submitted is the point of no return, so it is checked before the field-completeness
+  // rules below — a submitted supplier stays submitted.
+  if (supplier.submittedToCssAt) return "PENDING_CSS";
   if (supplier.documentCount === 0) return "AWAITING_DOCUMENTS";
   // Both are needed before CSS has anything to review: a quote without an MOQ can't be
   // compared against one that has it.
   if (supplier.landedPrice == null || !(supplier.moq ?? "").trim()) return "AWAITING_PRICING";
-  return "PENDING_CSS";
+  return "READY_TO_SUBMIT";
+}
+
+// Supply Chain may change a supplier's documents and pricing right up to submitting it,
+// and not afterwards: once CSS has it, changing the quote underneath them would make
+// their decision about something that no longer exists.
+export function canEditSupplierSubmission(supplier: {
+  submittedToCssAt?: Date | null;
+}): boolean {
+  return !supplier.submittedToCssAt;
+}
+
+export function canSubmitSupplierToCss(
+  supplier: Parameters<typeof supplierStage>[0]
+): boolean {
+  return supplierStage(supplier) === "READY_TO_SUBMIT";
 }
 
 // Ready to hand to CSS: every supplier that is going to be considered has its documents
