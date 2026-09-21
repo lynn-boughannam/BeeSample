@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   ORDER_STATUS_LABELS,
   ORDER_STATUS_SEQUENCE,
-  type CssDecision,
   type OrderStatus,
 } from "@/lib/types";
 import {
@@ -16,12 +15,20 @@ import {
   isAwaitingAdminReview,
   isAwaitingSupplyChain,
   needsDocumentRequest,
+  SUPPLIER_STAGE_LABELS,
+  supplierStage,
   type OrderRequestType,
+  type SupplierStage,
 } from "@/lib/orders";
 import { ReviewPanel } from "./review-panel";
 import { approveOrder, rejectOrder } from "./review-actions";
 import { DocumentPanel, type SupplierDocument } from "../../supply-chain/document-panel";
-import { attachSupplierDocuments, deleteSupplierDocument } from "../../supply-chain/actions";
+import { PricingForm } from "../../supply-chain/pricing-form";
+import {
+  attachSupplierDocuments,
+  deleteSupplierDocument,
+  saveSupplierPricing,
+} from "../../supply-chain/actions";
 import {
   SLA_ROW_CLASS,
   SLA_TEXT_CLASS,
@@ -47,11 +54,14 @@ const STATUS_VARIANT: Record<OrderStatus, "info" | "success" | "danger" | "warni
   RECEIVED: "success",
 };
 
-const CSS_VARIANT: Record<CssDecision, "success" | "danger" | "neutral"> = {
-  APPROVED: "success",
-  REJECTED: "danger",
-  PENDING: "neutral",
+const STAGE_VARIANT: Record<SupplierStage, "neutral" | "warning" | "info" | "success" | "danger"> = {
+  AWAITING_DOCUMENTS: "neutral",
+  AWAITING_PRICING: "warning",
+  PENDING_CSS: "info",
+  CSS_APPROVED: "success",
+  CSS_REJECTED: "danger",
 };
+
 
 export default async function OrderDetailPage({
   params,
@@ -285,6 +295,12 @@ export default async function OrderDetailPage({
                 Boolean(done)
               );
               const due = order.decidedAt ? supplierDocumentDueDate(order.decidedAt) : null;
+              const stage = supplierStage({
+                documentCount: s.documents.length,
+                landedPrice: s.landedPrice,
+                moq: s.moq,
+                cssDecision: s.cssDecision,
+              });
               return (
               <li
                 key={s.id}
@@ -298,9 +314,9 @@ export default async function OrderDetailPage({
                     {s.supplierName}
                   </span>
                   {s.isSelected && <Badge variant="info">Selected</Badge>}
-                  <Badge variant={CSS_VARIANT[s.cssDecision as CssDecision] ?? "neutral"}>
-                    CSS {s.cssDecision.toLowerCase()}
-                  </Badge>
+                  {/* Phase 3 — derived from the row, so it can't claim documents are in
+                      while the list below shows none. */}
+                  <Badge variant={STAGE_VARIANT[stage]}>{SUPPLIER_STAGE_LABELS[stage]}</Badge>
                 </div>
 
                 <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
@@ -355,6 +371,15 @@ export default async function OrderDetailPage({
                     canEdit={isSupplyChain && isAwaitingSupplyChain(status)}
                     attachAction={attachSupplierDocuments}
                     deleteAction={deleteSupplierDocument}
+                  />
+                )}
+
+                {isSupplyChain && isAwaitingSupplyChain(status) && (
+                  <PricingForm
+                    orderSupplierId={s.id}
+                    landedPrice={s.landedPrice?.toString() ?? ""}
+                    moq={s.moq ?? ""}
+                    action={saveSupplierPricing}
                   />
                 )}
               </li>

@@ -220,6 +220,10 @@ export function orderSupplierNames(order: {
 // module may only export async functions, and the form needs these to describe itself.
 export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 export const MAX_DOCUMENTS_PER_UPLOAD = 10;
+// One upload has to fit inside serverActions.bodySizeLimit in next.config.ts, which is
+// 25 MB. Checked here too so an oversized batch gets a sentence explaining itself rather
+// than the framework's opaque rejection.
+export const MAX_UPLOAD_TOTAL_BYTES = 20 * 1024 * 1024;
 
 // A COA or SDS is a PDF, sometimes a scan or an office document. Anything else is very
 // likely a mistake, and refusing it on the way in is kinder than storing it and finding
@@ -234,3 +238,55 @@ export const ALLOWED_DOCUMENT_TYPES: ReadonlySet<string> = new Set([
   "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
+
+// ---------------------------------------------------------------------------
+// Phase 3 — documents attached and priced, per supplier
+// ---------------------------------------------------------------------------
+
+/**
+ * Where one supplier option has got to.
+ *
+ * Derived from the row rather than stored: a supplier is "pending CSS review" exactly
+ * when its documents and its pricing are both in, and a stored status could disagree with
+ * the very fields it claims to summarise.
+ */
+export const SUPPLIER_STAGES = [
+  "AWAITING_DOCUMENTS",
+  "AWAITING_PRICING",
+  "PENDING_CSS",
+  "CSS_APPROVED",
+  "CSS_REJECTED",
+] as const;
+
+export type SupplierStage = (typeof SUPPLIER_STAGES)[number];
+
+export const SUPPLIER_STAGE_LABELS: Record<SupplierStage, string> = {
+  AWAITING_DOCUMENTS: "Awaiting documents",
+  AWAITING_PRICING: "Awaiting price & MOQ",
+  PENDING_CSS: "Documents attached – pending CSS review",
+  CSS_APPROVED: "CSS approved",
+  CSS_REJECTED: "CSS rejected",
+};
+
+export function supplierStage(supplier: {
+  documentCount: number;
+  landedPrice: unknown;
+  moq: string | null;
+  cssDecision: string;
+}): SupplierStage {
+  if (supplier.cssDecision === "APPROVED") return "CSS_APPROVED";
+  if (supplier.cssDecision === "REJECTED") return "CSS_REJECTED";
+  if (supplier.documentCount === 0) return "AWAITING_DOCUMENTS";
+  // Both are needed before CSS has anything to review: a quote without an MOQ can't be
+  // compared against one that has it.
+  if (supplier.landedPrice == null || !(supplier.moq ?? "").trim()) return "AWAITING_PRICING";
+  return "PENDING_CSS";
+}
+
+// Ready to hand to CSS: every supplier that is going to be considered has its documents
+// and its price in.
+export function readyForCssReview(
+  suppliers: Array<Parameters<typeof supplierStage>[0]>
+): boolean {
+  return suppliers.length > 0 && suppliers.every((s) => supplierStage(s) === "PENDING_CSS");
+}

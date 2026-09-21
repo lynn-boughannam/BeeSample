@@ -7,6 +7,7 @@ import {
   ALLOWED_DOCUMENT_TYPES,
   MAX_DOCUMENTS_PER_UPLOAD,
   MAX_DOCUMENT_BYTES,
+  MAX_UPLOAD_TOTAL_BYTES,
   isAwaitingSupplyChain,
   needsDocumentRequest,
   type OrderRequestType,
@@ -63,6 +64,11 @@ export async function attachSupplierDocuments(
   if (files.length === 0) return { error: "Choose at least one file to attach." };
   if (files.length > MAX_DOCUMENTS_PER_UPLOAD) {
     return { error: `Attach at most ${MAX_DOCUMENTS_PER_UPLOAD} files at a time.` };
+  }
+
+  const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+  if (totalBytes > MAX_UPLOAD_TOTAL_BYTES) {
+    return { error: "That's more than 20 MB at once. Attach them in smaller batches." };
   }
 
   for (const file of files) {
@@ -196,4 +202,51 @@ export async function deleteSupplierDocument(
   revalidatePath("/supply-chain");
   revalidatePath(`/orders/${doc.orderSupplier.order.id}`);
   return { ok: `Removed ${doc.fileName}.` };
+}
+
+// Phase 3 — the quoted terms for one supplier. Landed price and MOQ together are what
+// CSS compares between options, so both are required: a price without an MOQ can't be
+// weighed against one that has it.
+export async function saveSupplierPricing(
+  _prev: DocumentUploadState,
+  formData: FormData
+): Promise<DocumentUploadState> {
+  const session = await requireSupplyChain();
+  if (!session) return { error: "Only Supply Chain can enter supplier pricing." };
+
+  const orderSupplierId = String(formData.get("orderSupplierId") ?? "");
+  const rawPrice = String(formData.get("landedPrice") ?? "").trim();
+  const moq = String(formData.get("moq") ?? "").trim();
+
+  const row = await prisma.sampleOrderSupplier.findUnique({
+    where: { id: orderSupplierId },
+    include: { order: { select: { id: true, status: true } } },
+  });
+  if (!row) return { error: "That supplier is no longer on the request." };
+  if (!isAwaitingSupplyChain(row.order.status as OrderStatus)) {
+    return { error: "This request isn't with Supply Chain." };
+  }
+
+  if (!rawPrice) return { error: "Enter the landed price." };
+  const price = Number(rawPrice);
+  if (!Number.isFinite(price) || price < 0) {
+    return { error: "The landed price must be a number that isn't negative." };
+  }
+  if (!moq) return { error: "Enter the MOQ." };
+
+  try {
+    await prisma.sampleOrderSupplier.update({
+      where: { id: orderSupplierId },
+      // Stored as a string so the Decimal column keeps the exact figure quoted, rather
+      // than whatever a float rounds it to.
+      data: { landedPrice: price.toFixed(2), moq },
+    });
+  } catch (error) {
+    console.error("saveSupplierPricing failed", error);
+    return { error: "Could not save that pricing. Try again." };
+  }
+
+  revalidatePath("/supply-chain");
+  revalidatePath(`/orders/${row.order.id}`);
+  return { ok: `Saved price and MOQ for ${row.supplierName}.` };
 }

@@ -6,9 +6,12 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import {
   ORDER_REQUEST_TYPE_LABELS,
+  SUPPLIER_STAGE_LABELS,
   needsDocumentRequest,
   orderLabel,
+  supplierStage,
   type OrderRequestType,
+  type SupplierStage,
 } from "@/lib/orders";
 import {
   SLA_ROW_CLASS,
@@ -20,10 +23,19 @@ import {
   SUPPLIER_DOCUMENT_SLA_DAYS,
 } from "@/lib/working-days";
 import { DocumentPanel, type SupplierDocument } from "./document-panel";
-import { attachSupplierDocuments, deleteSupplierDocument } from "./actions";
+import { PricingForm } from "./pricing-form";
+import { attachSupplierDocuments, deleteSupplierDocument, saveSupplierPricing } from "./actions";
 
-// Phase 2 — the Supply Chain queue. Approved requests, each with its supplier options and
-// what still needs chasing.
+// Phase 2/3 — the Supply Chain queue. Approved requests, each with its supplier options,
+// what still needs chasing, and what each has quoted.
+
+const STAGE_VARIANT: Record<SupplierStage, "neutral" | "warning" | "info" | "success" | "danger"> = {
+  AWAITING_DOCUMENTS: "neutral",
+  AWAITING_PRICING: "warning",
+  PENDING_CSS: "info",
+  CSS_APPROVED: "success",
+  CSS_REJECTED: "danger",
+};
 
 
 export default async function SupplyChainPage() {
@@ -127,6 +139,13 @@ export default async function SupplyChainPage() {
                     const label = slaLabel(level, elapsed, Boolean(done));
                     const due = order.decidedAt ? supplierDocumentDueDate(order.decidedAt) : null;
 
+                    const stage = supplierStage({
+                      documentCount: supplier.documents.length,
+                      landedPrice: supplier.landedPrice,
+                      moq: supplier.moq,
+                      cssDecision: supplier.cssDecision,
+                    });
+
                     const docs: SupplierDocument[] = supplier.documents.map((d) => ({
                       id: d.id,
                       fileName: d.fileName,
@@ -147,9 +166,10 @@ export default async function SupplyChainPage() {
                           <span className="text-body font-medium text-neutral-dark">
                             {supplier.supplierName}
                           </span>
-                          {done ? (
-                            <Badge variant="success">Documents in</Badge>
-                          ) : (
+                          <Badge variant={STAGE_VARIANT[stage]}>
+                            {SUPPLIER_STAGE_LABELS[stage]}
+                          </Badge>
+                          {done ? null : (
                             <span className={`text-caption ${SLA_TEXT_CLASS[level]}`}>
                               due {due ? day(due) : "—"}
                               {label ? ` · ${label}` : ""}
@@ -167,6 +187,15 @@ export default async function SupplyChainPage() {
                           canEdit
                           attachAction={attachSupplierDocuments}
                           deleteAction={deleteSupplierDocument}
+                        />
+
+                        {/* Phase 3 — what this supplier quoted. Asked for alongside the
+                            documents, since CSS needs both to compare options. */}
+                        <PricingForm
+                          orderSupplierId={supplier.id}
+                          landedPrice={supplier.landedPrice?.toString() ?? ""}
+                          moq={supplier.moq ?? ""}
+                          action={saveSupplierPricing}
                         />
                       </li>
                     );
