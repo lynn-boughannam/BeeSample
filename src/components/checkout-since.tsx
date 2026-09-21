@@ -5,6 +5,7 @@ import {
   daysSinceCheckout,
   getCheckoutWarningLevel,
 } from "@/lib/stock";
+import { formatDay } from "@/lib/dates";
 
 // The single rendering of a checked-out piece's since-date (SLT-57). Used by the Admin
 // dashboard's "Who has what" (SLT-38), the Formulator dashboard's "Currently with you"
@@ -25,7 +26,7 @@ export function CheckoutSince({
 
   return (
     <span className={`text-caption ${CHECKOUT_WARNING_CLASS[level]} ${className}`.trim()}>
-      since {checkedOutAt ? checkedOutAt.toISOString().slice(0, 10) : "—"}
+      since {checkedOutAt ? formatDay(checkedOutAt) : "—"}
       {label ? ` · ${label}` : ""}
     </span>
   );

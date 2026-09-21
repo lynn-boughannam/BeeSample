@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDay as day } from "@/lib/dates";
 import { notFound } from "next/navigation";
 import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -12,7 +13,6 @@ import { discardSample, restoreSample, deleteSample } from "./actions";
 import { addReceivedStock, checkoutPiece, discardPieces, logPieceUsage } from "./stock-actions";
 import { stockFromPieces, getCheckoutWarningLevel, type PieceStatus } from "@/lib/stock";
 
-const day = (d: Date) => d.toISOString().slice(0, 10);
 
 // The server's calendar day. toISOString() would give the UTC day, which can be a day off
 // from the clock the checkout action compares against.

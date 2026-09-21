@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDay as day } from "@/lib/dates";
 import type { Prisma } from "@prisma/client";
 import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -26,7 +27,6 @@ import { OrderFilters } from "./order-filters";
 // on a request yet — but status is shown, because a queue you can't see the state of is
 // just a list.
 
-const day = (d: Date) => d.toISOString().slice(0, 10);
 
 // Colour tracks what the status means, not where it sits in the sequence: waiting on
 // someone is amber, moving is blue, finished is green, dead is red.

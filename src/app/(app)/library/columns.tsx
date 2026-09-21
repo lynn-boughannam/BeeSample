@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { formatDay as day } from "@/lib/dates";
 import { shelfAddress, shelfCellKey } from "@/lib/categories";
 import type { ShelfCellColors } from "@/lib/shelf";
 import { EMPTY_STOCK, stockLevel, type SampleStock } from "@/lib/stock";
@@ -8,7 +9,6 @@ export type LibrarySample = Prisma.SampleGetPayload<{
   include: { createdBy: true; _count: { select: { ingredients: true } } };
 }>;
 
-const day = (d: Date) => d.toISOString().slice(0, 10);
 
 // Everything a column needs that isn't on the sample row itself: the shelf plan's colour
 // per cell, and the stock computed from each sample's pieces (SLT-29).

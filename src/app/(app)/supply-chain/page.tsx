@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDay as day } from "@/lib/dates";
 import { redirect } from "next/navigation";
 import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -23,7 +24,6 @@ import { requestSupplierDocuments } from "./actions";
 // Phase 2 — the Supply Chain queue. Approved requests, each with its supplier options and
 // what still needs chasing.
 
-const day = (d: Date) => d.toISOString().slice(0, 10);
 
 export default async function SupplyChainPage() {
   const session = await verifySession();

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDay as day } from "@/lib/dates";
 import { notFound } from "next/navigation";
 import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -13,16 +14,26 @@ import {
   ORDER_REQUEST_TYPE_LABELS,
   canEditOrder,
   isAwaitingAdminReview,
+  isAwaitingSupplyChain,
+  needsDocumentRequest,
   type OrderRequestType,
 } from "@/lib/orders";
 import { ReviewPanel } from "./review-panel";
 import { approveOrder, rejectOrder } from "./review-actions";
+import { RequestDocumentsButton } from "../../supply-chain/request-button";
+import { requestSupplierDocuments } from "../../supply-chain/actions";
+import {
+  SLA_ROW_CLASS,
+  SLA_TEXT_CLASS,
+  slaLabel,
+  supplierDocumentSlaLevel,
+  workingDaysBetween,
+} from "@/lib/working-days";
 
 // A submitted request is not a sample yet — it may never become one. This is where an
 // order is read: the sample it was raised against (if any) is a reference on it, not a
 // substitute for it.
 
-const day = (d: Date) => d.toISOString().slice(0, 10);
 
 const STATUS_VARIANT: Record<OrderStatus, "info" | "success" | "danger" | "warning" | "neutral"> = {
   SUBMITTED: "info",
@@ -51,7 +62,13 @@ export default async function OrderDetailPage({
   const { id } = await params;
   const { saved } = await searchParams;
   const session = await verifySession();
-  const isAdmin = session.user.role === "ADMIN";
+  const role = session.user.role;
+  const isAdmin = role === "ADMIN";
+  // Supply Chain and CSS both act on a request and need to see what it's for — Samer
+  // can't chase documents for a material he can't read the details of. Deciding stays
+  // Admin-only; this is read access plus each role's own step.
+  const worksOrders = isAdmin || role === "SUPPLY_CHAIN" || role === "CSS";
+  const isSupplyChain = isAdmin || role === "SUPPLY_CHAIN";
 
   const order = await prisma.sampleOrder.findUnique({
     where: { id },
@@ -73,9 +90,10 @@ export default async function OrderDetailPage({
 
   if (!order) notFound();
   // A Formulator sees only their own requests, matching the list.
-  if (!isAdmin && order.orderedById !== session.user.id) notFound();
+  if (!worksOrders && order.orderedById !== session.user.id) notFound();
 
   const status = order.status as OrderStatus;
+  const skipsDocuments = !needsDocumentRequest(order.requestType as OrderRequestType);
   const stepIndex = ORDER_STATUS_SEQUENCE.indexOf(status);
 
   return (
@@ -229,14 +247,32 @@ export default async function OrderDetailPage({
           between options rather than applying to the request as a whole.
         </p>
 
+        {/* A repeat order from the same source needs nothing chased (Phase 2). */}
+        {!skipsDocuments && isSupplyChain && isAwaitingSupplyChain(status) && (
+          <p className="text-caption mb-3 text-neutral-dark/60">
+            Logging a request starts a 7-working-day clock on that supplier.
+          </p>
+        )}
+        {skipsDocuments && (
+          <p className="text-body mb-3 rounded-md border border-success/40 bg-success/10 px-3 py-2 text-on-success">
+            Same supplier as before — documents are already on file, so none are chased.
+          </p>
+        )}
+
         {order.suppliers.length === 0 ? (
           <SupplierNamesOnly order={order} />
         ) : (
           <ul className="space-y-3">
-            {order.suppliers.map((s) => (
+            {order.suppliers.map((s) => {
+              const sla = supplierDocumentSlaLevel(s.documentsRequestedAt);
+              const elapsed = s.documentsRequestedAt
+                ? workingDaysBetween(s.documentsRequestedAt, new Date())
+                : 0;
+              const slaText = slaLabel(sla, elapsed);
+              return (
               <li
                 key={s.id}
-                className={`rounded-md border p-4 ${
+                className={`rounded-md border p-4 ${SLA_ROW_CLASS[sla]} ${
                   s.isSelected ? "border-brand-secondary bg-brand-primary/[0.06]" : "border-neutral-dark/15"
                 }`}
               >
@@ -260,7 +296,14 @@ export default async function OrderDetailPage({
                     {s.documentsRequestedAt ? day(s.documentsRequestedAt) : <Missing />}
                   </Field>
                   <Field label="Docs due">
-                    {s.documentsDueAt ? day(s.documentsDueAt) : <Missing />}
+                    {s.documentsDueAt ? (
+                      <span className={SLA_TEXT_CLASS[sla]}>
+                        {day(s.documentsDueAt)}
+                        {slaText ? ` · ${slaText}` : ""}
+                      </span>
+                    ) : (
+                      <Missing />
+                    )}
                   </Field>
                   <Field label="CSS decided">
                     {s.cssDecisionAt ? day(s.cssDecisionAt) : <Missing />}
@@ -272,15 +315,31 @@ export default async function OrderDetailPage({
                   <p className="text-caption mt-2 text-neutral-dark/70">{s.cssNote}</p>
                 )}
 
-                <p className="text-caption mt-2 text-neutral-dark/60">
-                  {s.documents.length === 0
-                    ? "No documents attached yet."
-                    : `${s.documents.length} document${s.documents.length === 1 ? "" : "s"}: ${s.documents
-                        .map((d) => d.fileName)
-                        .join(", ")}`}
-                </p>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-caption text-neutral-dark/60">
+                    {s.documents.length === 0
+                      ? "No documents attached yet."
+                      : `${s.documents.length} document${s.documents.length === 1 ? "" : "s"}: ${s.documents
+                          .map((d) => d.fileName)
+                          .join(", ")}`}
+                  </p>
+
+                  {/* Phase 2 — the action sits with the details, so Samer can read what
+                      the material is before asking a supplier for its paperwork. */}
+                  {isSupplyChain &&
+                    isAwaitingSupplyChain(status) &&
+                    !skipsDocuments &&
+                    !s.documentsRequestedAt && (
+                      <RequestDocumentsButton
+                        orderSupplierId={s.id}
+                        supplierName={s.supplierName}
+                        action={requestSupplierDocuments}
+                      />
+                    )}
+                </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
 

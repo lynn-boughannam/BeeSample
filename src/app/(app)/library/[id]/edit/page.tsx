@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDay as day } from "@/lib/dates";
 import { notFound, redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
@@ -7,7 +8,6 @@ import { loadShelfCellColors, loadShelfOccupancy, resolveShelfDefaults } from "@
 import { SampleForm } from "../../sample-form";
 import { updateSample } from "../actions";
 
-const day = (d: Date) => d.toISOString().slice(0, 10);
 
 export default async function EditSamplePage({
   params,

@@ -9,6 +9,7 @@ import {
   orderSupplierNames,
   ORDER_REQUEST_TYPES,
 } from "./src/lib/orders";
+import { formatDay } from "./src/lib/dates";
 import {
   addWorkingDays,
   supplierDocumentDueDate,
@@ -196,6 +197,36 @@ async function main() {
     check("approval creates the supplier rows Phase 2 works on",
       /sampleOrderSupplier\.createMany/.test(review), true);
     check("rejection leaves none behind", /decision === "APPROVE" && order\._count\.suppliers === 0/.test(review), true);
+
+    console.log("\n=== dates are shown in local time, not UTC ===");
+    // addWorkingDays returns local midnight. At UTC+3 that is 21:00 the previous day in
+    // UTC, so toISOString() would show a due date a day early — a supplier document due
+    // Wednesday displayed as Tuesday.
+    const localMidnight = new Date(2026, 8, 30, 0, 0, 0);
+    check("local midnight formats as its own day", formatDay(localMidnight), "2026-09-30");
+    check("toISOString would have got this wrong",
+      localMidnight.toISOString().slice(0, 10) === "2026-09-30", false);
+    const dueFromMonday = supplierDocumentDueDate(new Date(2026, 8, 21, 9, 0));
+    check("a Monday request is due the following Wednesday", formatDay(dueFromMonday), "2026-09-30");
+    check("late-evening timestamps keep their own day",
+      formatDay(new Date(2026, 8, 30, 23, 30)), "2026-09-30");
+    const dateSites = [
+      "src/app/(app)/orders/[id]/page.tsx",
+      "src/app/(app)/supply-chain/page.tsx",
+      "src/components/checkout-since.tsx",
+    ];
+    check("no screen formats dates via toISOString",
+      dateSites.filter((f) => readFileSync(f, "utf8").includes("toISOString().slice(0, 10)")).join(",") || "none",
+      "none");
+
+    console.log("\n=== Samer can open the request he has to chase ===");
+    const detail = readFileSync("src/app/(app)/orders/[id]/page.tsx", "utf8");
+    check("Supply Chain and CSS can read an order",
+      /role === "SUPPLY_CHAIN" \|\| role === "CSS"/.test(detail), true);
+    check("a Formulator still only sees their own",
+      /!worksOrders && order\.orderedById !== session\.user\.id/.test(detail), true);
+    check("deciding stays Admin-only", /isAdmin && isAwaitingAdminReview\(status\)/.test(detail), true);
+    check("the request button sits with the details", /RequestDocumentsButton/.test(detail), true);
 
     const nav = readFileSync("src/lib/nav.ts", "utf8");
     check("Supply Chain has a nav entry",

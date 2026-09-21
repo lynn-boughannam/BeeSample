@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDay as day } from "@/lib/dates";
 import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { shelfAddress } from "@/lib/categories";
@@ -10,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 // here. Everything on this page is a reflection of what an Admin already recorded through
 // checkout (SLT-56) and usage logging (SLT-29), so there are no actions anywhere on it.
 
-const day = (d: Date) => d.toISOString().slice(0, 10);
 
 export default async function MyCheckoutsPage() {
   const session = await verifySession();

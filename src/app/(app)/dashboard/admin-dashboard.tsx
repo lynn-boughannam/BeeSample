@@ -1,11 +1,11 @@
 import Link from "next/link";
+import { formatDay as day } from "@/lib/dates";
 import { loadAdminDashboard, type ActivityKind, type CategoryBar } from "@/lib/dashboard";
 import { CheckoutSince, checkoutRowClass } from "@/components/checkout-since";
 
 // SLT-59. Five sections, all fed from loadAdminDashboard() so the page itself holds no
 // query logic and the numbers are verifiable without rendering.
 
-const day = (d: Date) => d.toISOString().slice(0, 10);
 
 // KPI destinations. Library filters are US-8.2's job; where a filter doesn't exist yet the
 // tile still leads somewhere useful rather than nowhere.
