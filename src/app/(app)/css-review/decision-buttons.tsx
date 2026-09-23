@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import type { CssReviewState } from "./actions";
 
-// Phase 4 — one supplier's costing decision. Approve is one click; rejecting asks why,
+// Phase 4 — one supplier's document decision. Approve is one click; rejecting asks why,
 // because an elimination nobody can explain is one Supply Chain will re-source identically
 // next time.
 export function DecisionButtons({
@@ -61,7 +61,7 @@ export function DecisionButtons({
             name="cssNote"
             rows={2}
             aria-label={`Why ${supplierName} is being rejected`}
-            placeholder="e.g. landed price well above the alternatives"
+            placeholder="e.g. SDS is out of date, or no certificate of analysis supplied"
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />

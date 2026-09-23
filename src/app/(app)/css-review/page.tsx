@@ -17,16 +17,22 @@ import {
   CSS_REVIEW_SLA_DAYS,
 } from "@/lib/working-days";
 import { DecisionButtons } from "./decision-buttons";
-import { approveSupplierCosting, rejectSupplierCosting } from "./actions";
+import { approveSupplierDocuments, rejectSupplierDocuments } from "./actions";
 
 // Phase 4 — the CSS queue.
+//
+// What CSS judges here is a supplier's DOCUMENTS. Costing approval is a later step and
+// belongs to the Formulator (COSTING_SUBMITTED_PENDING_FORMULATOR in the status track);
+// landed price and MOQ appear on each row as context for comparing options, not as the
+// thing being decided.
 //
 // Two sections, because a decision that disappears the moment it is made is not a record.
 // Reviewed work stays here with its reason, its documents and its date — including the
 // requests CSS ended by rejecting every option, which leave the pending list entirely.
 //
-// Options are grouped by request rather than listed flat: the decision is comparative, and
-// judging a landed price means seeing what the others quoted.
+// Options are grouped by request rather than listed flat: the decision is comparative —
+// these options are alternatives to one another, and the terms each quoted are part of
+// weighing them up.
 
 // Everything needed to render one supplier row, from either section.
 const supplierSelect = Prisma.validator<Prisma.SampleOrderSupplierSelect>()({
@@ -119,7 +125,7 @@ export default async function CssReviewPage() {
   return (
     <div className="max-w-5xl space-y-8">
       <div>
-        <h1 className="text-page-title text-neutral-dark">Costing review</h1>
+        <h1 className="text-page-title text-neutral-dark">Document review</h1>
         <p className="text-body mt-1 text-neutral-dark/60">
           {pendingCount === 0
             ? "Nothing is waiting on you. Everything you've reviewed is below."
@@ -312,8 +318,8 @@ function OrderCard({
                         orderSupplierId={supplier.id}
                         supplierName={supplier.supplierName}
                         isLastOption={live.length === 1}
-                        approveAction={approveSupplierCosting}
-                        rejectAction={rejectSupplierCosting}
+                        approveAction={approveSupplierDocuments}
+                        rejectAction={rejectSupplierDocuments}
                       />
                     ) : (
                       <div>

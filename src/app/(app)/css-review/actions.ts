@@ -5,9 +5,13 @@ import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { canRecordCssDecision, orderIsExhausted } from "@/lib/orders";
 
-// Phase 4 — CSS approves or rejects each supplier option independently. A rejected option
-// is eliminated, not sent back to Supply Chain; an order with every option eliminated has
-// nowhere left to go and is rejected outright.
+// Phase 4 — CSS approves or rejects each supplier's documents independently. Costing is a
+// later step and belongs to the Formulator (COSTING_SUBMITTED_PENDING_FORMULATOR), so what
+// is judged here is the paperwork; price and MOQ are shown alongside it only as context for
+// comparing the options.
+//
+// A rejected option is eliminated, not sent back to Supply Chain; an order with every
+// option eliminated has nowhere left to go and is rejected outright.
 
 export type CssReviewState = { error?: string; ok?: string } | undefined;
 
@@ -26,7 +30,7 @@ async function decide(
   note: string | null
 ): Promise<CssReviewState> {
   const session = await requireCss();
-  if (!session) return { error: "Only CSS can record a costing decision." };
+  if (!session) return { error: "Only CSS can record a document decision." };
   if (!orderSupplierId) return { error: "Which supplier?" };
 
   const row = await prisma.sampleOrderSupplier.findUnique({
@@ -71,7 +75,7 @@ async function decide(
             status: "REJECTED",
             decidedAt,
             rejectionReason:
-              "Every supplier option was rejected at costing review, so there is nothing left to order.",
+              "Every supplier option was rejected at document review, so there is nothing left to order.",
           },
         });
       }
@@ -105,7 +109,7 @@ async function decide(
   return { ok: `${row.supplierName} approved.` };
 }
 
-export async function approveSupplierCosting(
+export async function approveSupplierDocuments(
   _prev: CssReviewState,
   formData: FormData
 ): Promise<CssReviewState> {
@@ -113,7 +117,7 @@ export async function approveSupplierCosting(
   return decide(String(formData.get("orderSupplierId") ?? ""), "APPROVED", note || null);
 }
 
-export async function rejectSupplierCosting(
+export async function rejectSupplierDocuments(
   _prev: CssReviewState,
   formData: FormData
 ): Promise<CssReviewState> {

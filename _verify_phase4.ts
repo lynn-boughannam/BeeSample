@@ -19,8 +19,9 @@ import {
   CSS_REVIEW_WARNING_DAYS,
 } from "./src/lib/working-days";
 
-// Phase 4 — CSS review. Covers the brief's two scenarios: rejecting one option on a
-// three-option request leaves it alive with two, and rejecting all three ends it.
+// Phase 4 — CSS review. What CSS judges is a supplier's DOCUMENTS; costing approval is the
+// Formulator's, later in the track. Covers the brief's two scenarios: rejecting one option
+// on a three-option request leaves it alive with two, and rejecting all three ends it.
 
 const PREFIX = "ZZ-P4-";
 let failures = 0;
@@ -57,7 +58,7 @@ async function decide(id: string, decision: "APPROVED" | "REJECTED", note: strin
     if (orderIsExhausted(siblings)) {
       await tx.sampleOrder.update({
         where: { id: row.order.id },
-        data: { status: "REJECTED", decidedAt, rejectionReason: "All options rejected at costing." },
+        data: { status: "REJECTED", decidedAt, rejectionReason: "All options rejected at document review." },
       });
     }
   });
@@ -255,8 +256,18 @@ async function main() {
     check("a request half-decided isn't listed twice",
       /pendingIds\.has\(o\.id\)/.test(page), true);
 
+    // CSS reviews documents. Costing approval belongs to the Formulator further along the
+    // track (COSTING_SUBMITTED_PENDING_FORMULATOR), so nothing here should call it costing.
+    check("the page is about documents, not costing", /Document review/.test(page), true);
+    check("and no longer calls itself a costing review", /Costing review/.test(page), false);
+    check("the actions are named for documents",
+      /approveSupplierDocuments[\s\S]*rejectSupplierDocuments/.test(action), true);
+    check("a refusal says document decision", /record a document decision/.test(action), true);
+    check("exhaustion says document review", /rejected at document review/.test(action), true);
+
     const nav = readFileSync("src/lib/nav.ts", "utf8");
     check("CSS has a nav entry", /key: "css-review".*roles: \["ADMIN", "CSS"\]/.test(nav), true);
+    check("the nav says Document Review", /label: "Document Review"/.test(nav), true);
     const dash = readFileSync("src/app/(app)/dashboard/page.tsx", "utf8");
     check("CSS lands on its own queue", /role === "CSS"\) redirect\("\/css-review"\)/.test(dash), true);
   } finally {
