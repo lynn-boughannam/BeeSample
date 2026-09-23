@@ -16,6 +16,9 @@ import {
   isAwaitingSupplyChain,
   needsDocumentRequest,
   orderWaitingOn,
+  canSelectSupplier,
+  checkSelectionReady,
+  selectableSuppliers,
   SUPPLIER_STAGE_LABELS,
   canEditSupplierSubmission,
   supplierStageForOrder,
@@ -24,6 +27,8 @@ import {
 } from "@/lib/orders";
 import { ReviewPanel } from "./review-panel";
 import { approveOrder, rejectOrder } from "./review-actions";
+import { SelectionPanel, type SelectableSupplier } from "./selection-panel";
+import { selectSupplier } from "./selection-actions";
 import { DocumentPanel, type SupplierDocument } from "../../supply-chain/document-panel";
 import { PricingForm } from "../../supply-chain/pricing-form";
 import { SubmitToCssButton } from "../../supply-chain/submit-button";
@@ -131,6 +136,20 @@ export default async function OrderDetailPage({
   })));
   const stepIndex = ORDER_STATUS_SEQUENCE.indexOf(status);
 
+  // Phase 5. Choosing belongs to whoever raised the request, and only once CSS has finished
+  // with every option — picking while one is still under review would mean picking without
+  // knowing what it would have offered.
+  const mayChoose = canSelectSupplier(order, { id: session.user.id, role });
+  const selectionReady = checkSelectionReady(order, order.suppliers);
+  const approvedOptions: SelectableSupplier[] = selectableSuppliers(order.suppliers).map((s) => ({
+    id: s.id,
+    position: s.position,
+    supplierName: s.supplierName,
+    landedPrice: s.landedPrice?.toString() ?? null,
+    moq: s.moq,
+    documentCount: s.documents.length,
+  }));
+
   return (
     <div className="max-w-4xl space-y-6">
       <div>
@@ -174,6 +193,23 @@ export default async function OrderDetailPage({
           approveAction={approveOrder}
           rejectAction={rejectOrder}
         />
+      )}
+
+      {/* Phase 5 — the choice, or why it can't be made yet. Shown only to whoever raised
+          the request; the action checks again regardless of what this renders. */}
+      {mayChoose && selectionReady.ok && (
+        <SelectionPanel
+          orderId={order.id}
+          suppliers={approvedOptions}
+          requiredQuantityG={order.requiredQuantityG ?? ""}
+          action={selectSupplier}
+        />
+      )}
+      {mayChoose && !selectionReady.ok && status === "APPROVED_PENDING_SUPPLY_CHAIN" && (
+        <section className="rounded-lg border border-neutral-dark/15 bg-neutral-dark/[0.02] p-4">
+          <h2 className="text-section-header text-neutral-dark">Choose a supplier</h2>
+          <p className="text-body mt-1 text-neutral-dark/70">{selectionReady.reason}</p>
+        </section>
       )}
 
       {/* Where the request has reached. Rejected isn't on the track — it ends it. */}
@@ -339,7 +375,7 @@ export default async function OrderDetailPage({
                   <span className="text-body font-semibold text-neutral-dark">
                     {s.supplierName}
                   </span>
-                  {s.isSelected && <Badge variant="info">Selected</Badge>}
+                  {s.isSelected && <Badge variant="info">Chosen</Badge>}
                   {/* Phase 3 — derived from the row, so it can't claim documents are in
                       while the list below shows none. */}
                   <Badge variant={STAGE_VARIANT[stage]}>{SUPPLIER_STAGE_LABELS[stage]}</Badge>

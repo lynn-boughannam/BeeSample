@@ -451,3 +451,76 @@ export function orderWaitingOn(
   // and the status disagree, which is worth saying rather than hiding.
   return { label: "No options left", tone: "neutral" };
 }
+
+// ---------------------------------------------------------------------------
+// Phase 5 — supplier selection
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether CSS has finished with every option on a request.
+ *
+ * "Finished" means a decision is recorded, not merely that the option was sent. A supplier
+ * still sitting with Supply Chain — no documents, never submitted — is equally undecided,
+ * and choosing between options while one is still being worked on would mean choosing
+ * without knowing what it would have offered.
+ */
+export function allSuppliersCssDecided(
+  suppliers: Array<{ cssDecision: string }>
+): boolean {
+  return (
+    suppliers.length > 0 &&
+    suppliers.every((s) => s.cssDecision === "APPROVED" || s.cssDecision === "REJECTED")
+  );
+}
+
+// The options a Formulator may actually choose between: CSS approved the documents.
+export function selectableSuppliers<T extends { cssDecision: string }>(suppliers: T[]): T[] {
+  return suppliers.filter((s) => s.cssDecision === "APPROVED");
+}
+
+/**
+ * Whether a request is ready for its supplier to be chosen, and if not, why.
+ *
+ * The reason is returned rather than a bare false so the Formulator is told what is holding
+ * it up — "one option is still with CSS" is actionable, a disabled button is not.
+ */
+export function checkSelectionReady(
+  order: { status: string },
+  suppliers: Array<{ cssDecision: string }>
+): { ok: true } | { ok: false; reason: string } {
+  if (order.status === "REJECTED") {
+    return { ok: false, reason: "This request was rejected." };
+  }
+  if (order.status !== "APPROVED_PENDING_SUPPLY_CHAIN") {
+    return { ok: false, reason: "A supplier has already been chosen for this request." };
+  }
+  if (suppliers.length === 0) {
+    return { ok: false, reason: "No supplier options were recorded on this request." };
+  }
+  if (!allSuppliersCssDecided(suppliers)) {
+    const undecided = suppliers.filter(
+      (s) => s.cssDecision !== "APPROVED" && s.cssDecision !== "REJECTED"
+    ).length;
+    // The noun agrees with the total, the verb with how many are outstanding: "1 of 3
+    // supplier options is", "2 of 3 supplier options are", "1 of 1 supplier option is".
+    const noun = suppliers.length === 1 ? "supplier option" : "supplier options";
+    const verb = undecided === 1 ? "is" : "are";
+    return {
+      ok: false,
+      reason: `${undecided} of ${suppliers.length} ${noun} ${verb} still being reviewed. You can choose once every option has been decided.`,
+    };
+  }
+  if (selectableSuppliers(suppliers).length === 0) {
+    return { ok: false, reason: "Every supplier option was rejected, so there is nothing to choose." };
+  }
+  return { ok: true };
+}
+
+// Selection belongs to whoever raised the request; an Admin can act for them, as with every
+// other step in this workflow.
+export function canSelectSupplier(
+  order: { orderedById: string },
+  user: { id: string; role: string }
+): boolean {
+  return user.role === "ADMIN" || order.orderedById === user.id;
+}
