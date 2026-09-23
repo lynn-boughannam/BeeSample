@@ -516,6 +516,21 @@ export function checkSelectionReady(
   return { ok: true };
 }
 
+/**
+ * Whether the Formulator may decline the whole request.
+ *
+ * Same gate as choosing, and deliberately so: declining is the other half of the same
+ * decision. CSS approving a supplier's documents says the paperwork is in order, not that
+ * the terms are worth accepting — an MOQ of 25 kg against a 100 g requirement is a perfectly
+ * good reason to walk away, and only the person who raised it can judge that.
+ */
+export function checkDeclineReady(
+  order: { status: string },
+  suppliers: Array<{ cssDecision: string }>
+): { ok: true } | { ok: false; reason: string } {
+  return checkSelectionReady(order, suppliers);
+}
+
 // Selection belongs to whoever raised the request; an Admin can act for them, as with every
 // other step in this workflow.
 export function canSelectSupplier(

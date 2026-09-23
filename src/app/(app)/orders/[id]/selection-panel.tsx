@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FormField, Input } from "@/components/ui/input";
+import { FormField, Input, Textarea } from "@/components/ui/input";
 import type { SelectionState } from "./selection-actions";
 
 export type SelectableSupplier = {
@@ -14,46 +14,66 @@ export type SelectableSupplier = {
   documentCount: number;
 };
 
-// Phase 5 — choosing between the options CSS approved. Radio buttons rather than a button
-// per row: this is one decision between alternatives, and the terms sit next to each other
-// so they can be compared before committing.
+// Phase 5 — the Formulator either chooses one of the options CSS approved, or declines them
+// all. Both are the same decision, so both live here: CSS approving the documents says the
+// paperwork is in order, not that the terms are worth accepting.
+//
+// Radio buttons rather than a button per row, because this is one choice between
+// alternatives — the terms sit next to each other to be compared before committing.
 export function SelectionPanel({
   orderId,
   suppliers,
   requiredQuantityG,
-  action,
+  selectAction,
+  declineAction,
 }: {
   orderId: string;
   suppliers: SelectableSupplier[];
   requiredQuantityG: string;
-  action: (prev: SelectionState, fd: FormData) => Promise<SelectionState>;
+  selectAction: (prev: SelectionState, fd: FormData) => Promise<SelectionState>;
+  declineAction: (prev: SelectionState, fd: FormData) => Promise<SelectionState>;
 }) {
-  const [state, submit, pending] = useActionState(action, undefined);
+  const [selectState, select, selecting] = useActionState(selectAction, undefined);
+  const [declineState, decline, declining] = useActionState(declineAction, undefined);
   // Pre-selected when there is only one survivor: the choice is still explicit, but it
   // doesn't make someone tick the only box on offer.
   const [chosen, setChosen] = useState(suppliers.length === 1 ? suppliers[0].id : "");
+  const [showDecline, setShowDecline] = useState(false);
+  const [reason, setReason] = useState("");
+
+  const error = selectState?.error ?? declineState?.error;
+  const ok = selectState?.ok ?? declineState?.ok;
+  const busy = selecting || declining;
 
   return (
     <section className="rounded-lg border border-brand-secondary/30 bg-brand-primary/[0.06] p-5">
       <h2 className="text-section-header text-neutral-dark">Choose a supplier</h2>
       <p className="text-caption mt-0.5 mb-4 text-neutral-dark/70">
         {suppliers.length === 1
-          ? "One option was approved. Confirm it to send this request on for costing."
-          : `${suppliers.length} options were approved. Pick the one to proceed with.`}
+          ? "One option passed document review."
+          : `${suppliers.length} options passed document review.`}{" "}
+        Their documents are in order — whether the terms work is yours to judge.
+        {requiredQuantityG && (
+          <>
+            {" "}
+            You asked for <strong className="font-semibold">{requiredQuantityG} g</strong>; check
+            that against each MOQ below.
+          </>
+        )}
       </p>
 
-      {state?.error && (
+      {error && (
         <p className="text-body mb-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-danger">
-          {state.error}
+          {error}
         </p>
       )}
-      {state?.ok && !state.error && (
+      {ok && !error && (
         <p className="text-body mb-3 rounded-md border border-success/40 bg-success/10 px-3 py-2 text-on-success">
-          {state.ok}
+          {ok}
         </p>
       )}
 
-      <form action={submit}>
+      <form action={select}>
         <input type="hidden" name="orderId" value={orderId} />
 
         <ul className="space-y-2">
@@ -76,8 +96,11 @@ export function SelectionPanel({
                 />
                 <span className="text-caption text-neutral-dark/45">#{s.position}</span>
                 <span className="text-body font-medium text-neutral-dark">{s.supplierName}</span>
-                <span className="text-caption text-neutral-dark/70">
-                  {s.landedPrice ?? "—"} · MOQ {s.moq || "—"}
+                <span className="text-caption text-neutral-dark/70">{s.landedPrice ?? "—"}</span>
+                {/* MOQ is often the reason a request is declined, so it is called out
+                    rather than buried in a run of figures. */}
+                <span className="text-body font-medium text-neutral-dark">
+                  MOQ {s.moq || "—"}
                 </span>
                 <span className="text-caption ml-auto text-neutral-dark/50">
                   {s.documentCount} document{s.documentCount === 1 ? "" : "s"}
@@ -101,8 +124,8 @@ export function SelectionPanel({
               className="w-40"
             />
           </FormField>
-          <Button type="submit" disabled={pending || chosen === ""}>
-            {pending ? "Recording…" : "Confirm supplier"}
+          <Button type="submit" disabled={busy || chosen === ""}>
+            {selecting ? "Recording…" : "Confirm supplier"}
           </Button>
           {chosen === "" && (
             <span className="text-caption pb-2 text-neutral-dark/55">
@@ -111,6 +134,50 @@ export function SelectionPanel({
           )}
         </div>
       </form>
+
+      <div className="mt-4 border-t border-neutral-dark/10 pt-4">
+        {!showDecline ? (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => setShowDecline(true)}
+          >
+            None of these work
+          </Button>
+        ) : (
+          <form action={decline} className="space-y-3">
+            <input type="hidden" name="orderId" value={orderId} />
+            <p className="text-caption text-neutral-dark/70">
+              This ends the request. Nothing will be ordered.
+            </p>
+            {/* Required: Supply Chain sourced these, and "no" without a reason is an
+                instruction to source the same ones again. */}
+            <FormField label="Why don't these work?" htmlFor={`decline-${orderId}`}>
+              <Textarea
+                id={`decline-${orderId}`}
+                name="declineReason"
+                rows={2}
+                autoFocus
+                placeholder="e.g. the MOQ is far above what we need for a trial"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </FormField>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="submit" disabled={declining || reason.trim() === ""}>
+                {declining ? "Declining…" : "Confirm decline"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setShowDecline(false)}>
+                Cancel
+              </Button>
+              {reason.trim() === "" && (
+                <span className="text-caption text-neutral-dark/55">A reason is needed.</span>
+              )}
+            </div>
+          </form>
+        )}
+      </div>
     </section>
   );
 }

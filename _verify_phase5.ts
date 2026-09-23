@@ -6,13 +6,15 @@ import { parseMssqlUrl } from "./src/lib/mssql-url";
 import {
   allSuppliersCssDecided,
   canSelectSupplier,
+  checkDeclineReady,
   checkSelectionReady,
   orderWaitingOn,
   selectableSuppliers,
 } from "./src/lib/orders";
 
-// Phase 5 — the Formulator chooses between the options CSS approved, and may correct the
-// quantity. The gate is the point: nothing is choosable while any option is still undecided.
+// Phase 5 — the Formulator either chooses between the options CSS approved or declines them
+// all, and may correct the quantity. The gate is the point: nothing is actionable while any
+// option is still undecided.
 
 const PREFIX = "ZZ-P5-";
 let failures = 0;
@@ -231,7 +233,20 @@ async function main() {
     check("the panel only shows to whoever raised it", /mayChoose && selectionReady\.ok/.test(page), true);
     check("and the reason shows when it isn't ready",
       /mayChoose && !selectionReady\.ok/.test(page), true);
+    check("declining needs a reason", /Say why none of these options work/.test(action), true);
+    check("only the requester may decline",
+      /Only the person who raised this request can decline it/.test(action), true);
+    check("declining is gated like choosing", /checkDeclineReady\(order, order\.suppliers\)/.test(action), true);
+    check("a decline ends the request", /status: "REJECTED"/.test(action), true);
+    check("and is attributed", /Declined by the requester/.test(action), true);
+
     const panel = readFileSync("src/app/(app)/orders/[id]/selection-panel.tsx", "utf8");
+    check("the panel offers a decline", /None of these work/.test(panel), true);
+    check("it warns the request ends", /This ends the request/.test(panel), true);
+    // MOQ is often the reason, so it has to be readable against what was asked for.
+    check("MOQ is called out per option", /MOQ \{s\.moq/.test(panel), true);
+    check("and the requested quantity is shown to compare against",
+      /You asked for/.test(panel), true);
     check("options are radios, one decision between alternatives",
       /type="radio"/.test(panel), true);
     check("the quantity can be corrected while choosing",

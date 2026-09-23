@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { canSelectSupplier, checkSelectionReady } from "@/lib/orders";
+import { canSelectSupplier, checkDeclineReady, checkSelectionReady } from "@/lib/orders";
 
 // Phase 5 — the Formulator chooses between the options CSS approved, and may correct the
 // quantity while doing so. Choosing is what moves the request off Supply Chain's desk.
@@ -89,4 +89,66 @@ export async function selectSupplier(
   revalidatePath("/css-review");
 
   return { ok: `${chosen.supplierName} chosen. This request is ready for costing.` };
+}
+
+/**
+ * Declining every remaining option, which ends the request.
+ *
+ * The other half of the same decision as choosing: CSS approving a supplier's documents
+ * says the paperwork is in order, not that the terms are worth accepting. An MOQ far above
+ * what was asked for is a good reason to walk away, and only the person who raised the
+ * request can judge that.
+ */
+export async function declineAllSuppliers(
+  _prev: SelectionState,
+  formData: FormData
+): Promise<SelectionState> {
+  const session = await verifySession();
+
+  const orderId = String(formData.get("orderId") ?? "");
+  const reason = String(formData.get("declineReason") ?? "").trim();
+  if (!orderId) return { error: "Which request?" };
+
+  // Required: Supply Chain sourced these options, and "no" without a reason is an
+  // instruction to source the same ones again.
+  if (!reason) return { error: "Say why none of these options work." };
+
+  const order = await prisma.sampleOrder.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      status: true,
+      orderedById: true,
+      suppliers: { select: { cssDecision: true } },
+    },
+  });
+  if (!order) return { error: "That request no longer exists." };
+
+  if (!canSelectSupplier(order, { id: session.user.id, role: session.user.role })) {
+    return { error: "Only the person who raised this request can decline it." };
+  }
+
+  const ready = checkDeclineReady(order, order.suppliers);
+  if (!ready.ok) return { error: ready.reason };
+
+  try {
+    await prisma.sampleOrder.update({
+      where: { id: orderId },
+      data: {
+        status: "REJECTED",
+        decidedAt: new Date(),
+        rejectionReason: `Declined by the requester: ${reason}`,
+      },
+    });
+  } catch (error) {
+    console.error("declineAllSuppliers failed", error);
+    return { error: "Could not record that. Try again." };
+  }
+
+  revalidatePath(`/orders/${orderId}`);
+  revalidatePath("/orders");
+  revalidatePath("/supply-chain");
+  revalidatePath("/css-review");
+
+  return { ok: "Request declined. None of the approved options will be ordered." };
 }

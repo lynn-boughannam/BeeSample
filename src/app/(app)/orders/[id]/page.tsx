@@ -28,7 +28,7 @@ import {
 import { ReviewPanel } from "./review-panel";
 import { approveOrder, rejectOrder } from "./review-actions";
 import { SelectionPanel, type SelectableSupplier } from "./selection-panel";
-import { selectSupplier } from "./selection-actions";
+import { declineAllSuppliers, selectSupplier } from "./selection-actions";
 import { DocumentPanel, type SupplierDocument } from "../../supply-chain/document-panel";
 import { PricingForm } from "../../supply-chain/pricing-form";
 import { SubmitToCssButton } from "../../supply-chain/submit-button";
@@ -202,7 +202,8 @@ export default async function OrderDetailPage({
           orderId={order.id}
           suppliers={approvedOptions}
           requiredQuantityG={order.requiredQuantityG ?? ""}
-          action={selectSupplier}
+          selectAction={selectSupplier}
+          declineAction={declineAllSuppliers}
         />
       )}
       {mayChoose && !selectionReady.ok && status === "APPROVED_PENDING_SUPPLY_CHAIN" && (
