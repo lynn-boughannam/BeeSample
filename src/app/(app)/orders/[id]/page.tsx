@@ -15,6 +15,7 @@ import {
   isAwaitingAdminReview,
   isAwaitingSupplyChain,
   needsDocumentRequest,
+  orderWaitingOn,
   SUPPLIER_STAGE_LABELS,
   canEditSupplierSubmission,
   supplierStageForOrder,
@@ -119,6 +120,15 @@ export default async function OrderDetailPage({
 
   const status = order.status as OrderStatus;
   const skipsDocuments = !needsDocumentRequest(order.requestType as OrderRequestType);
+  // The stored status parks at "Approved – Pending Supply Chain" while the work happens per
+  // supplier, so say what it is actually waiting on rather than leaving that to be guessed.
+  const waitingOn = orderWaitingOn(order, order.suppliers.map((s) => ({
+    documentCount: s.documents.length,
+    landedPrice: s.landedPrice,
+    moq: s.moq,
+    cssDecision: s.cssDecision,
+    submittedToCssAt: s.submittedToCssAt,
+  })));
   const stepIndex = ORDER_STATUS_SEQUENCE.indexOf(status);
 
   return (
@@ -140,9 +150,12 @@ export default async function OrderDetailPage({
               · raised by {order.orderedBy.name} on {day(order.createdAt)}
             </p>
           </div>
-          <Badge variant={STATUS_VARIANT[status] ?? "neutral"}>
-            {ORDER_STATUS_LABELS[status] ?? order.status}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={STATUS_VARIANT[status] ?? "neutral"}>
+              {ORDER_STATUS_LABELS[status] ?? order.status}
+            </Badge>
+            {waitingOn && <Badge variant={waitingOn.tone}>{waitingOn.label}</Badge>}
+          </div>
         </div>
       </div>
 

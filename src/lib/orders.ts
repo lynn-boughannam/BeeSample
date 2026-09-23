@@ -382,3 +382,72 @@ export function supplierStageForOrder(
     needsDocuments: needsDocumentRequest(order.requestType as OrderRequestType),
   });
 }
+
+// ---------------------------------------------------------------------------
+// What a request is actually waiting on
+// ---------------------------------------------------------------------------
+
+/**
+ * The stored order status stops at "Approved – Pending Supply Chain" while the real work
+ * happens per supplier (phase 0: "per-supplier states happen inside this"). That is fine
+ * as a record, but it reads as a lie once Supply Chain has finished and CSS has decided.
+ *
+ * This derives what the request is genuinely waiting on from its supplier rows, so a badge
+ * can say so without inventing a stored transition or pre-empting supplier selection.
+ *
+ * Returns null when the stored status already tells the whole truth — submitted, rejected,
+ * or anything past selection.
+ */
+export type OrderWaitingOn = {
+  label: string;
+  // Matches the badge vocabulary the rest of the app uses.
+  tone: "neutral" | "warning" | "info" | "success";
+};
+
+export function orderWaitingOn(
+  order: { status: string; requestType: string },
+  suppliers: Array<Omit<Parameters<typeof supplierStage>[0], "needsDocuments">>
+): OrderWaitingOn | null {
+  // Only the stage that holds the per-supplier work needs explaining.
+  if (order.status !== "APPROVED_PENDING_SUPPLY_CHAIN") return null;
+
+  if (suppliers.length === 0) {
+    return { label: "No supplier options recorded", tone: "neutral" };
+  }
+
+  const stages = suppliers.map((s) => supplierStageForOrder(order, s));
+  const count = (stage: SupplierStage) => stages.filter((s) => s === stage).length;
+  const total = stages.length;
+
+  const awaitingDocs = count("AWAITING_DOCUMENTS");
+  const awaitingPricing = count("AWAITING_PRICING");
+  const readyToSend = count("READY_TO_SUBMIT");
+  const withCss = count("PENDING_CSS");
+  const approved = count("CSS_APPROVED");
+
+  // Reported in workflow order, so the badge names the earliest thing still outstanding —
+  // that is what someone has to do next.
+  if (awaitingDocs > 0) {
+    return { label: `Awaiting documents (${awaitingDocs} of ${total})`, tone: "neutral" };
+  }
+  if (awaitingPricing > 0) {
+    return { label: `Awaiting price & MOQ (${awaitingPricing} of ${total})`, tone: "warning" };
+  }
+  if (readyToSend > 0) {
+    return { label: `Ready to send to CSS (${readyToSend} of ${total})`, tone: "warning" };
+  }
+  if (withCss > 0) {
+    return { label: `With CSS (${withCss} of ${total})`, tone: "info" };
+  }
+  // Nothing outstanding anywhere: every option has been decided, and at least one survived
+  // — so the request is waiting on a supplier being chosen.
+  if (approved > 0) {
+    return {
+      label: `Documents approved — ready to select (${approved} of ${total})`,
+      tone: "success",
+    };
+  }
+  // Every option rejected is handled by the stored status; reaching here means the rows
+  // and the status disagree, which is worth saying rather than hiding.
+  return { label: "No options left", tone: "neutral" };
+}

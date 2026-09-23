@@ -19,6 +19,7 @@ import {
   ORDER_REQUEST_TYPE_LABELS,
   PLACEHOLDER_NOTE,
   orderLabel,
+  orderWaitingOn,
   type OrderRequestType,
 } from "@/lib/orders";
 import { OrderFilters } from "./order-filters";
@@ -95,6 +96,17 @@ export default async function OrdersPage({
         orderedBy: { select: { name: true } },
         existingSample: { select: { id: true, sampleCode: true, rmName: true } },
         ingredients: { include: { ingredient: { select: { id: true, inciName: true } } } },
+        // Enough to say what each request is actually waiting on. A count of documents,
+        // never the rows — and certainly never the bytes.
+        suppliers: {
+          select: {
+            landedPrice: true,
+            moq: true,
+            cssDecision: true,
+            submittedToCssAt: true,
+            _count: { select: { documents: true } },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -106,6 +118,24 @@ export default async function OrdersPage({
   const awaitingReview = isAdmin
     ? await prisma.sampleOrder.count({ where: { status: "SUBMITTED" } })
     : 0;
+
+  // The stored status parks at "Approved – Pending Supply Chain" while the work happens per
+  // supplier, so each row also says what it is genuinely waiting on.
+  const waitingOn = new Map(
+    orders.map((order) => [
+      order.id,
+      orderWaitingOn(
+        order,
+        order.suppliers.map((s) => ({
+          documentCount: s._count.documents,
+          landedPrice: s.landedPrice,
+          moq: s.moq,
+          cssDecision: s.cssDecision,
+          submittedToCssAt: s.submittedToCssAt,
+        }))
+      ),
+    ])
+  );
 
   const filtered = Boolean(query || type || status);
 
@@ -236,9 +266,18 @@ export default async function OrdersPage({
                 <TableCell>{order.projectName ?? dash}</TableCell>
                 <TableCell>{order.orderedBy.name}</TableCell>
                 <TableCell>
-                  <Badge variant={STATUS_VARIANT[order.status as OrderStatus] ?? "neutral"}>
-                    {ORDER_STATUS_LABELS[order.status as OrderStatus] ?? order.status}
-                  </Badge>
+                  <span className="flex flex-col items-start gap-1">
+                    <Badge variant={STATUS_VARIANT[order.status as OrderStatus] ?? "neutral"}>
+                      {ORDER_STATUS_LABELS[order.status as OrderStatus] ?? order.status}
+                    </Badge>
+                    {/* What it is actually waiting on, derived from the supplier rows —
+                        the stored status parks while that work happens. */}
+                    {waitingOn.get(order.id) && (
+                      <span className="text-caption text-neutral-dark/60">
+                        {waitingOn.get(order.id)!.label}
+                      </span>
+                    )}
+                  </span>
                 </TableCell>
               </TableRow>
             ))
