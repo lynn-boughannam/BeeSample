@@ -439,14 +439,9 @@ export function orderWaitingOn(
   if (withCss > 0) {
     return { label: `With CSS (${withCss} of ${total})`, tone: "info" };
   }
-  // Nothing outstanding anywhere: every option has been decided, and at least one survived
-  // — so the request is waiting on a supplier being chosen.
-  if (approved > 0) {
-    return {
-      label: `Documents approved — ready to select (${approved} of ${total})`,
-      tone: "success",
-    };
-  }
+  // Nothing outstanding anywhere. The stored status now says "pending Formulator approval"
+  // in its own right, so there is nothing left for this to add.
+  if (approved > 0) return null;
   // Every option rejected is handled by the stored status; reaching here means the rows
   // and the status disagree, which is worth saying rather than hiding.
   return { label: "No options left", tone: "neutral" };
@@ -491,7 +486,10 @@ export function checkSelectionReady(
   if (order.status === "REJECTED") {
     return { ok: false, reason: "This request was rejected." };
   }
-  if (order.status !== "APPROVED_PENDING_SUPPLY_CHAIN") {
+  if (order.status === "APPROVED_PENDING_SUPPLY_CHAIN") {
+    return { ok: false, reason: "Supply Chain and CSS haven't finished with this request yet." };
+  }
+  if (order.status !== "COSTING_SUBMITTED_PENDING_FORMULATOR") {
     return { ok: false, reason: "A supplier has already been chosen for this request." };
   }
   if (suppliers.length === 0) {
@@ -547,4 +545,21 @@ export function canSelectSupplier(
   user: { id: string }
 ): boolean {
   return order.orderedById === user.id;
+}
+
+/**
+ * What an order's status should become once a CSS decision has been recorded against one
+ * of its suppliers. Null means it stays where it is — CSS hasn't finished.
+ *
+ * Until this existed the status sat at "Approved — pending Supply Chain" through the whole
+ * of CSS review and out the other side, so a request that was actually waiting on the
+ * Formulator still claimed to be waiting on Supply Chain.
+ */
+export function orderStatusAfterCssDecision(
+  suppliers: Array<{ cssDecision: string }>
+): OrderStatus | null {
+  if (!allSuppliersCssDecided(suppliers)) return null;
+  // Nothing survived: there is nothing to choose between, so the request ends.
+  if (selectableSuppliers(suppliers).length === 0) return "REJECTED";
+  return "COSTING_SUBMITTED_PENDING_FORMULATOR";
 }

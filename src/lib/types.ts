@@ -23,8 +23,12 @@ export const ORDER_STATUSES = [
   "SUBMITTED",
   "REJECTED",
   "APPROVED_PENDING_SUPPLY_CHAIN",
-  "SUPPLIER_SELECTED",
+  // Costing comes before selection, not after: Supply Chain prices the options, CSS clears
+  // their documents, and the request is then with the Formulator — whose approval IS the
+  // choice of supplier. The phase 0 brief listed these the other way round, before the
+  // steps existed (corrected 2026-09-28).
   "COSTING_SUBMITTED_PENDING_FORMULATOR",
+  "SUPPLIER_SELECTED",
   "FORMULATOR_APPROVED_PENDING_PR",
   "PR_ISSUED_AWAITING_RECEIPT",
   "RECEIVED",

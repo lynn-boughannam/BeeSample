@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
-import { canRecordCssDecision, orderIsExhausted } from "@/lib/orders";
+import { canRecordCssDecision, orderStatusAfterCssDecision } from "@/lib/orders";
 
 // Phase 4 — CSS approves or rejects each supplier's documents independently. Costing is a
 // later step and belongs to the Formulator (COSTING_SUBMITTED_PENDING_FORMULATOR), so what
@@ -68,7 +68,11 @@ async function decide(
         select: { cssDecision: true },
       });
 
-      if (orderIsExhausted(siblings)) {
+      // Once CSS has finished with every option the request moves on — to the Formulator
+      // if anything survived, or to rejected if nothing did. Leaving it at "pending Supply
+      // Chain" through all of this is what made the status read as a lie.
+      const next = orderStatusAfterCssDecision(siblings);
+      if (next === "REJECTED") {
         await tx.sampleOrder.update({
           where: { id: row.order.id },
           data: {
@@ -78,6 +82,8 @@ async function decide(
               "Every supplier option was rejected at document review, so there is nothing left to order.",
           },
         });
+      } else if (next) {
+        await tx.sampleOrder.update({ where: { id: row.order.id }, data: { status: next } });
       }
     });
   } catch (error) {

@@ -8,6 +8,7 @@ import {
   canSelectSupplier,
   checkDeclineReady,
   checkSelectionReady,
+  orderStatusAfterCssDecision,
   orderWaitingOn,
   selectableSuppliers,
 } from "./src/lib/orders";
@@ -30,10 +31,50 @@ const prisma = new PrismaClient({
   adapter: new PrismaMssql(parseMssqlUrl(process.env.DATABASE_URL!)),
 });
 
+// Where the per-supplier work still sits with Supply Chain and CSS.
 const OPEN = { status: "APPROVED_PENDING_SUPPLY_CHAIN" };
+// Where CSS has finished and the request is back with the Formulator. The decision that
+// settles the last option moves it here, and only here is a choice available.
+const READY = { status: "COSTING_SUBMITTED_PENDING_FORMULATOR" };
 const appr = { cssDecision: "APPROVED" };
 const rej = { cssDecision: "REJECTED" };
 const pend = { cssDecision: "PENDING" };
+
+// Mirrors decide() in css-review/actions.ts — including the status advance, which is the
+// whole point: writing a decision straight to the row would leave the order parked at
+// "pending Supply Chain" and the gate below would never open.
+async function cssDecide(
+  orderId: string,
+  orderSupplierId: string,
+  decision: "APPROVED" | "REJECTED",
+  cssDecidedById: string,
+  note?: string
+) {
+  await prisma.$transaction(async (tx) => {
+    await tx.sampleOrderSupplier.update({
+      where: { id: orderSupplierId },
+      data: {
+        cssDecision: decision,
+        cssDecisionAt: new Date(),
+        cssDecidedById,
+        cssNote: note ?? null,
+      },
+    });
+    const siblings = await tx.sampleOrderSupplier.findMany({
+      where: { orderId },
+      select: { cssDecision: true },
+    });
+    const next = orderStatusAfterCssDecision(siblings);
+    if (next === "REJECTED") {
+      await tx.sampleOrder.update({
+        where: { id: orderId },
+        data: { status: "REJECTED", decidedAt: new Date(), rejectionReason: "all options rejected" },
+      });
+    } else if (next) {
+      await tx.sampleOrder.update({ where: { id: orderId }, data: { status: next } });
+    }
+  });
+}
 
 // Mirrors selectSupplier() in selection-actions.ts.
 async function choose(orderId: string, orderSupplierId: string, quantity?: string) {
@@ -67,27 +108,37 @@ async function main() {
     allSuppliersCssDecided([appr, pend]), false);
 
   console.log("\n=== and it says what is holding it up ===");
-  const midReview = checkSelectionReady(OPEN, [appr, pend, rej]);
+  // While that work is still theirs, whose it is IS the answer. Counting options the
+  // Formulator can do nothing about would read as something for them to wait on.
+  const withThem = checkSelectionReady(OPEN, [appr, pend, rej]);
+  check("blocked while Supply Chain and CSS are still on it", withThem.ok, false);
+  check("and says whose it is",
+    withThem.ok ? "" : withThem.reason,
+    "Supply Chain and CSS haven't finished with this request yet.");
+
+  // The per-option count is the fallback for rows and status disagreeing: the status only
+  // reaches READY once every option is decided, so normally this is never reached.
+  const midReview = checkSelectionReady(READY, [appr, pend, rej]);
   check("blocked while one is under review", midReview.ok, false);
   check("and names how many",
     midReview.ok ? "" : midReview.reason,
     "1 of 3 supplier options is still being reviewed. You can choose once every option has been decided.");
-  const twoLeft = checkSelectionReady(OPEN, [pend, pend, appr]);
+  const twoLeft = checkSelectionReady(READY, [pend, pend, appr]);
   check("plural reads correctly",
     twoLeft.ok ? "" : twoLeft.reason,
     "2 of 3 supplier options are still being reviewed. You can choose once every option has been decided.");
 
   console.log("\n=== once resolved, the survivors are the choices ===");
-  check("one approved of three", checkSelectionReady(OPEN, [appr, rej, rej]).ok, true);
-  check("two approved", checkSelectionReady(OPEN, [appr, appr, rej]).ok, true);
+  check("one approved of three", checkSelectionReady(READY, [appr, rej, rej]).ok, true);
+  check("two approved", checkSelectionReady(READY, [appr, appr, rej]).ok, true);
   check("only the approved are offered", selectableSuppliers([appr, rej, pend]).length, 1);
-  const noneLeft = checkSelectionReady(OPEN, [rej, rej]);
+  const noneLeft = checkSelectionReady(READY, [rej, rej]);
   check("everything rejected leaves nothing to choose", noneLeft.ok, false);
   check("and says so",
     noneLeft.ok ? "" : noneLeft.reason,
     "Every supplier option was rejected, so there is nothing to choose.");
   check("nothing recorded at all",
-    checkSelectionReady(OPEN, []).ok, false);
+    checkSelectionReady(READY, []).ok, false);
 
   console.log("\n=== a request past this point can't be chosen again ===");
   check("already selected", checkSelectionReady({ status: "SUPPLIER_SELECTED" }, [appr]).ok, false);
@@ -97,15 +148,19 @@ async function main() {
   console.log("\n=== declining is gated the same way ===");
   // Declining is the other half of the same decision, so it opens and closes together with
   // choosing — never available earlier, never left available afterwards.
-  check("blocked while one is under review", checkDeclineReady(OPEN, [appr, pend]).ok, false);
-  check("available once all are decided", checkDeclineReady(OPEN, [appr, rej]).ok, true);
+  check("blocked while Supply Chain and CSS are still on it",
+    checkDeclineReady(OPEN, [appr, rej]).ok, false);
+  check("blocked while one is under review", checkDeclineReady(READY, [appr, pend]).ok, false);
+  check("available once all are decided", checkDeclineReady(READY, [appr, rej]).ok, true);
   check("not after a supplier was chosen",
     checkDeclineReady({ status: "SUPPLIER_SELECTED" }, [appr]).ok, false);
   check("nothing to decline when CSS rejected everything",
-    checkDeclineReady(OPEN, [rej, rej]).ok, false);
+    checkDeclineReady(READY, [rej, rej]).ok, false);
   check("the two gates agree on every shape",
     [[appr, pend], [appr, rej], [rej, rej], []].every(
-      (s) => checkDeclineReady(OPEN, s).ok === checkSelectionReady(OPEN, s).ok
+      (s) =>
+        checkDeclineReady(READY, s).ok === checkSelectionReady(READY, s).ok &&
+        checkDeclineReady(OPEN, s).ok === checkSelectionReady(OPEN, s).ok
     ), true);
 
   console.log("\n=== who may choose: the submitter, and nobody else ===");
@@ -173,16 +228,11 @@ async function main() {
     check("choosing is refused", blocked, true);
 
     console.log("\n--- two decided, one still mid-review: still not actionable ---");
-    await prisma.sampleOrderSupplier.update({
-      where: { id: built.suppliers[0].id },
-      data: { cssDecision: "APPROVED", cssDecisionAt: new Date(), cssDecidedById: css.id },
-    });
-    await prisma.sampleOrderSupplier.update({
-      where: { id: built.suppliers[1].id },
-      data: { cssDecision: "REJECTED", cssDecisionAt: new Date(), cssDecidedById: css.id, cssNote: "Too dear" },
-    });
+    await cssDecide(built.id, built.suppliers[0].id, "APPROVED", css.id);
+    await cssDecide(built.id, built.suppliers[1].id, "REJECTED", css.id, "Too dear");
     now = await reload();
     check("one approved already", now.suppliers[0].cssDecision, "APPROVED");
+    check("the request has not moved on", now.status, "APPROVED_PENDING_SUPPLY_CHAIN");
     check("but still blocked by the third", checkSelectionReady(now, now.suppliers).ok, false);
     blocked = false;
     try {
@@ -193,20 +243,21 @@ async function main() {
     check("choosing is still refused", blocked, true);
 
     console.log("\n--- the last decision lands: now actionable ---");
-    await prisma.sampleOrderSupplier.update({
-      where: { id: built.suppliers[2].id },
-      data: { cssDecision: "APPROVED", cssDecisionAt: new Date(), cssDecidedById: css.id },
-    });
+    await cssDecide(built.id, built.suppliers[2].id, "APPROVED", css.id);
     now = await reload();
+    // The last CSS decision is what hands the request back to the Formulator. Leaving it at
+    // "pending Supply Chain" through all of this is what made the status read as a lie.
+    check("the request is now the Formulator's", now.status, "COSTING_SUBMITTED_PENDING_FORMULATOR");
     check("ready", checkSelectionReady(now, now.suppliers).ok, true);
     check("two options to choose between", selectableSuppliers(now.suppliers).length, 2);
     check("the rejected one isn't offered",
       selectableSuppliers(now.suppliers).some((s) => s.id === built.suppliers[1].id), false);
-    check("the badge says so",
+    // No second badge: the status above already says the request is waiting on them.
+    check("and the status says it without a second badge",
       orderWaitingOn(now, now.suppliers.map((s) => ({
         documentCount: 1, landedPrice: s.landedPrice, moq: s.moq,
         cssDecision: s.cssDecision, submittedToCssAt: s.submittedToCssAt,
-      })))?.label, "Documents approved — ready to select (2 of 3)");
+      }))), null);
 
     console.log("\n--- choosing, with a quantity correction ---");
     await choose(built.id, built.suppliers[2].id, "250");
@@ -221,7 +272,7 @@ async function main() {
       orderWaitingOn(after, after.suppliers.map((s) => ({
         documentCount: 1, landedPrice: s.landedPrice, moq: s.moq,
         cssDecision: s.cssDecision, submittedToCssAt: s.submittedToCssAt,
-      }))), "null");
+      }))), null);
 
     console.log("\n--- and it can't be chosen twice ---");
     blocked = false;

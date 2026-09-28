@@ -72,21 +72,25 @@ async function main() {
       sup({ ...priced, submittedToCssAt: sent }),
     ])?.label, "With CSS (2 of 2)");
 
-  console.log("\n=== once CSS is done it stops claiming to wait on Supply Chain ===");
+  // Once CSS has finished with every option, that decision moves the stored status on to
+  // "pending Formulator approval" — so this has nothing left to add, and saying the same
+  // thing in two badges only invites them to disagree.
+  console.log("\n=== once CSS is done, the stored status carries it ===");
   const approvedOne = sup({ ...priced, submittedToCssAt: sent, cssDecision: "APPROVED" });
   const rejectedOne = sup({ ...priced, submittedToCssAt: sent, cssDecision: "REJECTED" });
-  check("one approved, one rejected",
-    orderWaitingOn(NEW, [approvedOne, rejectedOne])?.label,
-    "Documents approved — ready to select (1 of 2)");
-  check("and it reads as done, not pending",
-    orderWaitingOn(NEW, [approvedOne, rejectedOne])?.tone, "success");
-  check("two approved",
-    orderWaitingOn(NEW, [approvedOne, approvedOne])?.label,
-    "Documents approved — ready to select (2 of 2)");
+  check("one approved, one rejected", orderWaitingOn(NEW, [approvedOne, rejectedOne]), null);
+  check("two approved", orderWaitingOn(NEW, [approvedOne, approvedOne]), null);
   // A rejected sibling must not drag the request back to an earlier stage.
   check("a rejected option doesn't reopen an earlier stage",
-    orderWaitingOn(NEW, [rejectedOne, approvedOne])?.label,
-    "Documents approved — ready to select (1 of 2)");
+    orderWaitingOn(NEW, [rejectedOne, approvedOne]), null);
+  // And nothing is added at the status it moves to either — that status is the answer.
+  check("nor at the status it moves to",
+    orderWaitingOn({ status: "COSTING_SUBMITTED_PENDING_FORMULATOR", requestType: "NEW" },
+      [approvedOne, approvedOne]), null);
+  // Every option gone is the stored status's business too — but rows saying so while the
+  // status still says otherwise have disagreed with it, and that is worth surfacing.
+  check("rows that contradict the status still speak up",
+    orderWaitingOn(NEW, [rejectedOne, rejectedOne])?.label, "No options left");
 
   console.log("\n=== a repeat order isn't held up by documents it already has ===");
   check("same source, nothing entered",

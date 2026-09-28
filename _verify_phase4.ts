@@ -225,10 +225,14 @@ async function main() {
     check("only CSS decides", /role !== "CSS" && role !== "ADMIN"/.test(action), true);
     check("the server re-checks reviewability", /canRecordCssDecision/.test(action), true);
     check("a rejection needs a reason", /Give a reason for rejecting this supplier/.test(action), true);
-    check("exhaustion is judged inside the transaction",
-      /tx\.sampleOrderSupplier\.findMany[\s\S]*orderIsExhausted/.test(action), true);
+    check("the next status is judged inside the transaction",
+      /tx\.sampleOrderSupplier\.findMany[\s\S]*orderStatusAfterCssDecision/.test(action), true);
     check("the order is rejected when nothing is left",
       /status: "REJECTED"/.test(action), true);
+    // And it moves on when something does — leaving it at "pending Supply Chain" through
+    // all of this is what made the status read as a lie.
+    check("and moves on when something survives",
+      /data: \{ status: next \}/.test(action), true);
 
     const page = readFileSync("src/app/(app)/css-review/page.tsx", "utf8");
     check("the queue is CSS-only", /role !== "CSS" && role !== "ADMIN"/.test(page), true);
