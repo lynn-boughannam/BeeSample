@@ -33,8 +33,8 @@ export async function selectSupplier(
   });
   if (!order) return { error: "That request no longer exists." };
 
-  if (!canSelectSupplier(order, { id: session.user.id, role: session.user.role })) {
-    return { error: "Only the person who raised this request can choose its supplier." };
+  if (!canSelectSupplier(order, { id: session.user.id })) {
+    return { error: "Only the person who submitted this request can choose its supplier." };
   }
 
   // Re-checked against the stored rows rather than trusted from the page, which may have
@@ -124,8 +124,8 @@ export async function declineAllSuppliers(
   });
   if (!order) return { error: "That request no longer exists." };
 
-  if (!canSelectSupplier(order, { id: session.user.id, role: session.user.role })) {
-    return { error: "Only the person who raised this request can decline it." };
+  if (!canSelectSupplier(order, { id: session.user.id })) {
+    return { error: "Only the person who submitted this request can decline it." };
   }
 
   const ready = checkDeclineReady(order, order.suppliers);

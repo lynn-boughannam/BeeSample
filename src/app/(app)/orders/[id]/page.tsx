@@ -136,10 +136,11 @@ export default async function OrderDetailPage({
   })));
   const stepIndex = ORDER_STATUS_SEQUENCE.indexOf(status);
 
-  // Phase 5. Choosing belongs to whoever raised the request, and only once CSS has finished
-  // with every option — picking while one is still under review would mean picking without
-  // knowing what it would have offered.
-  const mayChoose = canSelectSupplier(order, { id: session.user.id, role });
+  // Phase 5. Choosing belongs to whoever submitted the request — no Admin stand-in, because
+  // this is a judgement about whether the terms suit the work, not an administrative step.
+  // And only once CSS has finished with every option: picking while one is still under
+  // review would mean picking without knowing what it would have offered.
+  const mayChoose = canSelectSupplier(order, { id: session.user.id });
   const selectionReady = checkSelectionReady(order, order.suppliers);
   const approvedOptions: SelectableSupplier[] = selectableSuppliers(order.suppliers).map((s) => ({
     id: s.id,

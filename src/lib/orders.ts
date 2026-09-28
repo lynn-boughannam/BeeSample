@@ -531,11 +531,20 @@ export function checkDeclineReady(
   return checkSelectionReady(order, suppliers);
 }
 
-// Selection belongs to whoever raised the request; an Admin can act for them, as with every
-// other step in this workflow.
+/**
+ * Selection belongs to whoever submitted the request, and to nobody else.
+ *
+ * Deliberately no Admin stand-in, unlike every earlier step. The earlier ones are
+ * administrative — reviewing an intake, chasing paperwork, checking costing — and someone
+ * can cover for an absent colleague without changing what the request means. This one is a
+ * judgement about whether the terms suit the work the material is for, and only the person
+ * who asked for it holds that. Signing for someone else here would record their name
+ * against a decision they did not make (confirmed 2026-09-28: the formulator who signs is
+ * the formulator who submits).
+ */
 export function canSelectSupplier(
   order: { orderedById: string },
-  user: { id: string; role: string }
+  user: { id: string }
 ): boolean {
-  return user.role === "ADMIN" || order.orderedById === user.id;
+  return order.orderedById === user.id;
 }

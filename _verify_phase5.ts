@@ -108,17 +108,18 @@ async function main() {
       (s) => checkDeclineReady(OPEN, s).ok === checkSelectionReady(OPEN, s).ok
     ), true);
 
-  console.log("\n=== who may choose ===");
+  console.log("\n=== who may choose: the submitter, and nobody else ===");
+  // No Admin stand-in here, unlike every earlier step. Signing for someone else would
+  // record their name against a judgement they did not make.
   const order = { orderedById: "u-formulator" };
-  check("the person who raised it",
-    canSelectSupplier(order, { id: "u-formulator", role: "FORMULATOR" }), true);
-  check("an Admin acting for them",
-    canSelectSupplier(order, { id: "u-admin", role: "ADMIN" }), true);
-  check("a different formulator may not",
-    canSelectSupplier(order, { id: "u-other", role: "FORMULATOR" }), false);
-  check("Supply Chain may not",
-    canSelectSupplier(order, { id: "u-sc", role: "SUPPLY_CHAIN" }), false);
-  check("CSS may not", canSelectSupplier(order, { id: "u-css", role: "CSS" }), false);
+  check("the person who submitted it", canSelectSupplier(order, { id: "u-formulator" }), true);
+  check("an Admin may NOT act for them", canSelectSupplier(order, { id: "u-admin" }), false);
+  check("a different formulator may not", canSelectSupplier(order, { id: "u-other" }), false);
+  check("Supply Chain may not", canSelectSupplier(order, { id: "u-sc" }), false);
+  check("CSS may not", canSelectSupplier(order, { id: "u-css" }), false);
+  // An Admin who raised it themselves still signs, because they are the submitter.
+  check("an Admin who submitted it themselves may",
+    canSelectSupplier({ orderedById: "u-admin" }, { id: "u-admin" }), true);
 
   console.log("\n=== against real rows ===");
   const admin = await prisma.user.findFirstOrThrow({ where: { role: { name: "ADMIN" } } });
@@ -234,8 +235,10 @@ async function main() {
 
     console.log("\n=== wiring ===");
     const action = readFileSync("src/app/(app)/orders/[id]/selection-actions.ts", "utf8");
-    check("only the requester (or an Admin) may choose",
-      /canSelectSupplier\(order, \{ id: session\.user\.id, role: session\.user\.role \}\)/.test(action), true);
+    check("only the submitter may choose — no role escape hatch",
+      /canSelectSupplier\(order, \{ id: session\.user\.id \}\)/.test(action), true);
+    check("and the refusal says so",
+      /Only the person who submitted this request can choose its supplier/.test(action), true);
     check("the gate is re-checked on the server", /checkSelectionReady\(order, order\.suppliers\)/.test(action), true);
     check("a rejected option can't be chosen", /wasn't approved, so it can't be chosen/.test(action), true);
     check("a bad quantity is refused", /greater than zero/.test(action), true);
@@ -248,8 +251,15 @@ async function main() {
     check("and the reason shows when it isn't ready",
       /mayChoose && !selectionReady\.ok/.test(page), true);
     check("declining needs a reason", /Say why none of these options work/.test(action), true);
-    check("only the requester may decline",
-      /Only the person who raised this request can decline it/.test(action), true);
+    check("only the submitter may decline",
+      /Only the person who submitted this request can decline it/.test(action), true);
+    // The rule itself must not read a role at all, or a stand-in can creep back in.
+    check("the rule ignores role entirely",
+      /role/.test(
+        readFileSync("src/lib/orders.ts", "utf8")
+          .split("export function canSelectSupplier")[1]
+          .split("}")[0]
+      ), false);
     check("declining is gated like choosing", /checkDeclineReady\(order, order\.suppliers\)/.test(action), true);
     check("a decline ends the request", /status: "REJECTED"/.test(action), true);
     check("and is attributed", /Declined by the requester/.test(action), true);
