@@ -20,7 +20,9 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "my-checkouts", label: "My Checkouts", href: "/my-checkouts", roles: ["FORMULATOR"] },
   { key: "ingredients", label: "Ingredient List", href: "/ingredients", roles: ["ADMIN", "FORMULATOR"] },
   { key: "requests", label: "Sample Requests", href: "/requests", roles: ["ADMIN", "FORMULATOR"] },
-  { key: "orders", label: "New Sample Orders", href: "/orders", roles: ["ADMIN", "FORMULATOR"] },
+  // Supply Chain and CSS both work requests, and their own queues show only the rows that
+  // have reached them — they need the list itself to read anything else.
+  { key: "orders", label: "New Sample Orders", href: "/orders", roles: ["ADMIN", "FORMULATOR", "SUPPLY_CHAIN", "CSS"] },
   { key: "supply-chain", label: "Supply Chain", href: "/supply-chain", roles: ["ADMIN", "SUPPLY_CHAIN"] },
   { key: "css-review", label: "Document Review", href: "/css-review", roles: ["ADMIN", "CSS"] },
   { key: "pending-feedback", label: "Pending Feedback", href: "/pending-feedback", roles: ["ADMIN"] },

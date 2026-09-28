@@ -59,15 +59,20 @@ export default async function OrdersPage({
     ? params.status!
     : "";
 
-  // A Formulator sees their own requests; an Admin sees everything, since procurement
-  // coordination is theirs.
-  const isAdmin = session.user.role === "ADMIN";
+  // A Formulator sees their own requests. An Admin sees everything, since procurement
+  // coordination is theirs — and so do Supply Chain and CSS, who work every request that
+  // reaches them and were otherwise sent to a list that could only ever be empty. Reading
+  // is all this grants; each role's actions are checked where they happen.
+  const role = session.user.role;
+  const isAdmin = role === "ADMIN";
+  const worksOrders = isAdmin || role === "SUPPLY_CHAIN" || role === "CSS";
+  const raisesOrders = isAdmin || role === "FORMULATOR";
 
   // Searching covers every field someone would recognise a request by, including the
   // sample it was raised against and all three supplier boxes. No `mode: "insensitive"` —
   // the sqlserver connector doesn't support it, and the collation is already case-blind.
   const where: Prisma.SampleOrderWhereInput = {
-    ...(isAdmin ? {} : { orderedById: session.user.id }),
+    ...(worksOrders ? {} : { orderedById: session.user.id }),
     ...(type ? { requestType: type } : {}),
     ...(status ? { status } : {}),
     ...(query
@@ -112,7 +117,7 @@ export default async function OrdersPage({
       orderBy: { createdAt: "desc" },
     }),
     // The unfiltered count, so the filter row can say how much is being hidden.
-    prisma.sampleOrder.count({ where: isAdmin ? {} : { orderedById: session.user.id } }),
+    prisma.sampleOrder.count({ where: worksOrders ? {} : { orderedById: session.user.id } }),
   ]);
 
   // Phase 1 — the review queue. Only an Admin acts on it, so only they are told about it.
@@ -152,17 +157,22 @@ export default async function OrdersPage({
         <div>
           <h1 className="text-page-title text-neutral-dark">Sample orders</h1>
           <p className="text-body mt-1 text-neutral-dark/60">
-            {isAdmin
+            {worksOrders
               ? "Every request raised, newest first."
               : "Requests you have raised, newest first."}
           </p>
         </div>
-        <Link
-          href="/orders/new"
-          className="text-body inline-flex items-center rounded-lg bg-brand-primary px-4 py-2 font-medium text-on-primary transition-[transform,opacity] duration-150 hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary focus-visible:ring-offset-2 active:scale-[0.98]"
-        >
-          New request
-        </Link>
+        {/* Raising a request is for whoever will sign for the supplier chosen off it.
+            Supply Chain and CSS read requests and act on their own step; they don't start
+            one, so they aren't offered the button. */}
+        {raisesOrders && (
+          <Link
+            href="/orders/new"
+            className="text-body inline-flex items-center rounded-lg bg-brand-primary px-4 py-2 font-medium text-on-primary transition-[transform,opacity] duration-150 hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary focus-visible:ring-offset-2 active:scale-[0.98]"
+          >
+            New request
+          </Link>
+        )}
       </div>
 
       {params.submitted === "1" && (

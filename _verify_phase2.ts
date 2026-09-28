@@ -239,6 +239,15 @@ async function main() {
     const nav = readFileSync("src/lib/nav.ts", "utf8");
     check("Supply Chain has a nav entry",
       /key: "supply-chain".*roles: \["ADMIN", "SUPPLY_CHAIN"\]/.test(nav), true);
+    // Their own queues show only the rows that have reached them; the list is how either
+    // role reads anything else.
+    check("Supply Chain and CSS reach the orders list",
+      /key: "orders".*"SUPPLY_CHAIN", "CSS"/.test(nav), true);
+
+    const list = readFileSync("src/app/(app)/orders/page.tsx", "utf8");
+    check("and the list doesn't filter them down to nothing",
+      /worksOrders \? \{\} : \{ orderedById: session\.user\.id \}/.test(list), true);
+    check("but neither is offered a new request", /raisesOrders && \(/.test(list), true);
   } finally {
     await prisma.sampleOrderSupplier.deleteMany({
       where: { order: { supplierName: { startsWith: PREFIX } } },
