@@ -32,8 +32,11 @@ export const ORDER_STATUSES = [
   // choice of supplier. The phase 0 brief listed these the other way round, before the
   // steps existed (corrected 2026-09-28).
   "COSTING_SUBMITTED_PENDING_FORMULATOR",
+  // One state, not two. Choosing the supplier IS the Formulator's approval — the request
+  // then sits waiting for a PR against the option they picked, so a separate
+  // "Formulator approved — pending PR" only named the same wait a second time. Nothing ever
+  // wrote it (merged 2026-09-28).
   "SUPPLIER_SELECTED",
-  "FORMULATOR_APPROVED_PENDING_PR",
   "PR_ISSUED_AWAITING_RECEIPT",
   "RECEIVED",
 ] as const;
@@ -44,9 +47,8 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   REJECTED: "Rejected",
   APPROVED_PENDING_SUPPLY_CHAIN: "Approved — awaiting documents & details from Supply Chain",
   DETAILS_SUBMITTED_AWAITING_CSS: "Details submitted — awaiting CSS approval on documents",
-  SUPPLIER_SELECTED: "Supplier selected",
+  SUPPLIER_SELECTED: "Supplier selected — pending PR",
   COSTING_SUBMITTED_PENDING_FORMULATOR: "Costing submitted — pending Formulator approval",
-  FORMULATOR_APPROVED_PENDING_PR: "Formulator approved — pending PR",
   PR_ISSUED_AWAITING_RECEIPT: "PR issued — awaiting receipt",
   RECEIVED: "Received",
 };

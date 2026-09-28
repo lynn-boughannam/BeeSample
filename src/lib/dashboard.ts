@@ -126,7 +126,6 @@ export async function loadAdminDashboard(
             "DETAILS_SUBMITTED_AWAITING_CSS",
             "SUPPLIER_SELECTED",
             "COSTING_SUBMITTED_PENDING_FORMULATOR",
-            "FORMULATOR_APPROVED_PENDING_PR",
             "PR_ISSUED_AWAITING_RECEIPT",
           ],
         },

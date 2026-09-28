@@ -122,14 +122,21 @@ async function main() {
     testUsers.every((u) => u.isActive), true);
 
   console.log("\n=== order status sequence ===");
-  check("nine statuses", ORDER_STATUSES.length, 9);
+  check("eight statuses", ORDER_STATUSES.length, 8);
   check("starts at Submitted", ORDER_STATUSES[0], "SUBMITTED");
   check("ends at Received", ORDER_STATUSES[ORDER_STATUSES.length - 1], "RECEIVED");
   // The order they are declared in is the order the workflow runs in, which the progress
   // bar reads positionally — so the CSS wait has to sit between the two steps it separates.
-  check("the CSS wait sits between Supply Chain and the Formulator",
-    ORDER_STATUSES.filter((s) => s !== "REJECTED").slice(1, 4).join(","),
-    "APPROVED_PENDING_SUPPLY_CHAIN,DETAILS_SUBMITTED_AWAITING_CSS,COSTING_SUBMITTED_PENDING_FORMULATOR");
+  check("the whole chain, in workflow order",
+    ORDER_STATUSES.filter((s) => s !== "REJECTED").join(","),
+    "SUBMITTED,APPROVED_PENDING_SUPPLY_CHAIN,DETAILS_SUBMITTED_AWAITING_CSS," +
+      "COSTING_SUBMITTED_PENDING_FORMULATOR,SUPPLIER_SELECTED,PR_ISSUED_AWAITING_RECEIPT,RECEIVED");
+  // Choosing the supplier and approving it are one act, so they are one status. A second
+  // one named the same wait twice and nothing ever wrote it.
+  check("no separate Formulator-approved status",
+    (ORDER_STATUSES as readonly string[]).includes("FORMULATOR_APPROVED_PENDING_PR"), false);
+  check("and the one that remains says what it is waiting for",
+    ORDER_STATUS_LABELS.SUPPLIER_SELECTED, "Supplier selected — pending PR");
   check("every status has a label",
     ORDER_STATUSES.every((s) => Boolean(ORDER_STATUS_LABELS[s])), true);
   // Nothing may be left on a status the new sequence doesn't contain.
