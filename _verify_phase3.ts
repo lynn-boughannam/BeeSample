@@ -8,6 +8,9 @@ import {
   SUPPLIER_STAGE_LABELS,
   canEditSupplierSubmission,
   canSubmitSupplierToCss,
+  isAwaitingSupplyChain,
+  isInSupplierWorkup,
+  orderStatusAfterCssSubmission,
   readyForCssReview,
   supplierStage,
   supplierStageForOrder,
@@ -236,6 +239,36 @@ async function main() {
     });
     await prisma.sampleOrderSupplierDocument.deleteMany({ where: { orderSupplierId: supplierId } });
     check("back to awaiting documents, pricing kept", (await reload()).stage, "AWAITING_DOCUMENTS");
+
+    // The supplier rows above are per option. This is the order-level consequence: Supply
+    // Chain's step is finished only when EVERY option has gone to CSS, because one supplier
+    // under review while another still needs a price is not a request CSS can work.
+    console.log("\n=== the order moves once the last option is handed over ===");
+    const at = (...dates: Array<Date | null>) => dates.map((d) => ({ submittedToCssAt: d }));
+    const now2 = new Date();
+    check("no options recorded", orderStatusAfterCssSubmission([]), null);
+    check("one of two sent", orderStatusAfterCssSubmission(at(now2, null)), null);
+    check("the other way round too", orderStatusAfterCssSubmission(at(null, now2)), null);
+    check("both sent", orderStatusAfterCssSubmission(at(now2, now2)), "DETAILS_SUBMITTED_AWAITING_CSS");
+    check("a single option is enough on its own",
+      orderStatusAfterCssSubmission(at(now2)), "DETAILS_SUBMITTED_AWAITING_CSS");
+
+    // And through the database, against the real order seeded above — one supplier, so
+    // submitting it is submitting the last one.
+    await prisma.sampleOrderSupplier.update({
+      where: { id: supplierId }, data: { submittedToCssAt: new Date() },
+    });
+    const submitted = await prisma.sampleOrderSupplier.findMany({
+      where: { orderId: order.id }, select: { submittedToCssAt: true },
+    });
+    check("the live row agrees",
+      orderStatusAfterCssSubmission(submitted), "DETAILS_SUBMITTED_AWAITING_CSS");
+    // Supply Chain's own actions read isAwaitingSupplyChain, which stays false at the new
+    // status — every row is locked by then, so there is nothing left for them to do.
+    check("and Supply Chain's step is closed",
+      isAwaitingSupplyChain("DETAILS_SUBMITTED_AWAITING_CSS"), false);
+    check("while the work-up is still open to what reads the rows",
+      isInSupplierWorkup("DETAILS_SUBMITTED_AWAITING_CSS"), true);
 
     console.log("\n=== wiring ===");
     const action = readFileSync("src/app/(app)/supply-chain/actions.ts", "utf8");

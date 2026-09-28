@@ -123,6 +123,7 @@ export async function loadAdminDashboard(
         status: {
           in: [
             "APPROVED_PENDING_SUPPLY_CHAIN",
+            "DETAILS_SUBMITTED_AWAITING_CSS",
             "SUPPLIER_SELECTED",
             "COSTING_SUBMITTED_PENDING_FORMULATOR",
             "FORMULATOR_APPROVED_PENDING_PR",
@@ -178,10 +179,13 @@ export async function loadAdminDashboard(
     a.formulatorName.localeCompare(b.formulatorName)
   );
 
-  // Requests this viewer raised that are waiting on them to choose a supplier.
+  // Requests this viewer raised that are waiting on them to choose a supplier. Narrowed to
+  // the status the choice opens at — checkSelectionReady below is still the authority, and
+  // querying Supply Chain's status instead made this silently always empty once the CSS
+  // decision started advancing the order.
   const myOrders = viewerId
     ? await prisma.sampleOrder.findMany({
-        where: { orderedById: viewerId, status: "APPROVED_PENDING_SUPPLY_CHAIN" },
+        where: { orderedById: viewerId, status: "COSTING_SUBMITTED_PENDING_FORMULATOR" },
         include: {
           existingSample: { select: { sampleCode: true, rmName: true } },
           suppliers: { select: { cssDecision: true } },

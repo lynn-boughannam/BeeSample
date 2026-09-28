@@ -33,6 +33,9 @@ const prisma = new PrismaClient({
 
 // Where the per-supplier work still sits with Supply Chain and CSS.
 const OPEN = { status: "APPROVED_PENDING_SUPPLY_CHAIN" };
+// And where it has all been handed to CSS. Still not the Formulator's — the gate has to
+// refuse both work-up statuses, not just the first one.
+const WITH_CSS = { status: "DETAILS_SUBMITTED_AWAITING_CSS" };
 // Where CSS has finished and the request is back with the Formulator. The decision that
 // settles the last option moves it here, and only here is a choice available.
 const READY = { status: "COSTING_SUBMITTED_PENDING_FORMULATOR" };
@@ -115,6 +118,13 @@ async function main() {
   check("and says whose it is",
     withThem.ok ? "" : withThem.reason,
     "Supply Chain and CSS haven't finished with this request yet.");
+  // Same answer once every option is with CSS. It must not fall through to "already chosen",
+  // which is what an unlisted status gets.
+  const atCss = checkSelectionReady(WITH_CSS, [appr, pend, rej]);
+  check("blocked while every option is with CSS", atCss.ok, false);
+  check("with the same answer",
+    atCss.ok ? "" : atCss.reason,
+    "Supply Chain and CSS haven't finished with this request yet.");
 
   // The per-option count is the fallback for rows and status disagreeing: the status only
   // reaches READY once every option is decided, so normally this is never reached.
@@ -160,7 +170,8 @@ async function main() {
     [[appr, pend], [appr, rej], [rej, rej], []].every(
       (s) =>
         checkDeclineReady(READY, s).ok === checkSelectionReady(READY, s).ok &&
-        checkDeclineReady(OPEN, s).ok === checkSelectionReady(OPEN, s).ok
+        checkDeclineReady(OPEN, s).ok === checkSelectionReady(OPEN, s).ok &&
+        checkDeclineReady(WITH_CSS, s).ok === checkSelectionReady(WITH_CSS, s).ok
     ), true);
 
   console.log("\n=== who may choose: the submitter, and nobody else ===");
@@ -188,7 +199,9 @@ async function main() {
       requestType: "NEW", inciName: PREFIX + "MATERIAL", requiredQuantityG: "100",
       supplier1: "A", supplier2: "B", supplier3: "C",
       directorApprovalConfirmed: true, orderedById: formulator.id,
-      status: "APPROVED_PENDING_SUPPLY_CHAIN", approvedById: admin.id, decidedAt: new Date(),
+      // All three options are seeded as already submitted to CSS, which is exactly the state
+      // the submission rule moves an order to — so seed the status it would have reached.
+      status: "DETAILS_SUBMITTED_AWAITING_CSS", approvedById: admin.id, decidedAt: new Date(),
       suppliers: {
         create: [1, 2, 3].map((position) => ({
           position,
@@ -232,7 +245,7 @@ async function main() {
     await cssDecide(built.id, built.suppliers[1].id, "REJECTED", css.id, "Too dear");
     now = await reload();
     check("one approved already", now.suppliers[0].cssDecision, "APPROVED");
-    check("the request has not moved on", now.status, "APPROVED_PENDING_SUPPLY_CHAIN");
+    check("the request has not moved on", now.status, "DETAILS_SUBMITTED_AWAITING_CSS");
     check("but still blocked by the third", checkSelectionReady(now, now.suppliers).ok, false);
     blocked = false;
     try {

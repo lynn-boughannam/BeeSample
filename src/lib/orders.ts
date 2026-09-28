@@ -183,6 +183,17 @@ export function isAwaitingSupplyChain(status: OrderStatus): boolean {
 }
 
 /**
+ * Whether the per-supplier work — chasing, pricing, reviewing — is still going on.
+ *
+ * Two statuses cover it: Supply Chain's own step, and the wait on CSS once every option has
+ * been handed over. Both are stages where the order sits still while its supplier rows move,
+ * so anything reading those rows has to accept either.
+ */
+export function isInSupplierWorkup(status: OrderStatus): boolean {
+  return status === "APPROVED_PENDING_SUPPLY_CHAIN" || status === "DETAILS_SUBMITTED_AWAITING_CSS";
+}
+
+/**
  * Whether a supplier on this request needs documents chased at all.
  *
  * A repeat order from the same source already has everything on file, so the step is
@@ -408,8 +419,8 @@ export function orderWaitingOn(
   order: { status: string; requestType: string },
   suppliers: Array<Omit<Parameters<typeof supplierStage>[0], "needsDocuments">>
 ): OrderWaitingOn | null {
-  // Only the stage that holds the per-supplier work needs explaining.
-  if (order.status !== "APPROVED_PENDING_SUPPLY_CHAIN") return null;
+  // Only the stages that hold the per-supplier work need explaining.
+  if (!isInSupplierWorkup(order.status as OrderStatus)) return null;
 
   if (suppliers.length === 0) {
     return { label: "No supplier options recorded", tone: "neutral" };
@@ -486,7 +497,7 @@ export function checkSelectionReady(
   if (order.status === "REJECTED") {
     return { ok: false, reason: "This request was rejected." };
   }
-  if (order.status === "APPROVED_PENDING_SUPPLY_CHAIN") {
+  if (isInSupplierWorkup(order.status as OrderStatus)) {
     return { ok: false, reason: "Supply Chain and CSS haven't finished with this request yet." };
   }
   if (order.status !== "COSTING_SUBMITTED_PENDING_FORMULATOR") {
@@ -545,6 +556,23 @@ export function canSelectSupplier(
   user: { id: string }
 ): boolean {
   return order.orderedById === user.id;
+}
+
+/**
+ * What an order's status should become once a supplier has been handed to CSS. Null means it
+ * stays where it is.
+ *
+ * It moves only when EVERY option has been submitted. Suppliers are worked independently, so
+ * one sitting with CSS while another still needs its price means Supply Chain's step is not
+ * finished — and an order-level status that said otherwise would send Samer's own queue the
+ * wrong answer about his own work.
+ */
+export function orderStatusAfterCssSubmission(
+  suppliers: Array<{ submittedToCssAt?: Date | null }>
+): OrderStatus | null {
+  if (suppliers.length === 0) return null;
+  if (!suppliers.every((s) => s.submittedToCssAt)) return null;
+  return "DETAILS_SUBMITTED_AWAITING_CSS";
 }
 
 /**

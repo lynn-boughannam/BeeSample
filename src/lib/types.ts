@@ -23,6 +23,10 @@ export const ORDER_STATUSES = [
   "SUBMITTED",
   "REJECTED",
   "APPROVED_PENDING_SUPPLY_CHAIN",
+  // Every option is with CSS and Supply Chain has nothing left to enter. Reached only when
+  // ALL of them have been submitted: one supplier under review while another still needs a
+  // price means Supply Chain's step isn't finished, whatever the first supplier's row says.
+  "DETAILS_SUBMITTED_AWAITING_CSS",
   // Costing comes before selection, not after: Supply Chain prices the options, CSS clears
   // their documents, and the request is then with the Formulator — whose approval IS the
   // choice of supplier. The phase 0 brief listed these the other way round, before the
@@ -38,7 +42,8 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   SUBMITTED: "Submitted",
   REJECTED: "Rejected",
-  APPROVED_PENDING_SUPPLY_CHAIN: "Approved — pending Supply Chain",
+  APPROVED_PENDING_SUPPLY_CHAIN: "Approved — awaiting documents & details from Supply Chain",
+  DETAILS_SUBMITTED_AWAITING_CSS: "Details submitted — awaiting CSS approval on documents",
   SUPPLIER_SELECTED: "Supplier selected",
   COSTING_SUBMITTED_PENDING_FORMULATOR: "Costing submitted — pending Formulator approval",
   FORMULATOR_APPROVED_PENDING_PR: "Formulator approved — pending PR",

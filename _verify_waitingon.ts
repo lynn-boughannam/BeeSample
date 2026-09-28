@@ -24,6 +24,9 @@ const prisma = new PrismaClient({
 
 const NEW = { status: "APPROVED_PENDING_SUPPLY_CHAIN", requestType: "NEW" };
 const SAME = { status: "APPROVED_PENDING_SUPPLY_CHAIN", requestType: "EXISTING_SAME_SOURCE" };
+// Once every option has gone to CSS the order moves here, and the badge keeps counting: how
+// many CSS still holds is not something the status itself says.
+const AT_CSS = { status: "DETAILS_SUBMITTED_AWAITING_CSS", requestType: "NEW" };
 const sent = new Date();
 
 const sup = (o: Partial<{
@@ -91,6 +94,12 @@ async function main() {
   // status still says otherwise have disagreed with it, and that is worth surfacing.
   check("rows that contradict the status still speak up",
     orderWaitingOn(NEW, [rejectedOne, rejectedOne])?.label, "No options left");
+
+  check("the count carries over to the CSS-wait status",
+    orderWaitingOn(AT_CSS, [
+      sup({ ...priced, submittedToCssAt: sent }),
+      sup({ ...priced, submittedToCssAt: sent, cssDecision: "APPROVED" }),
+    ])?.label, "With CSS (1 of 2)");
 
   console.log("\n=== a repeat order isn't held up by documents it already has ===");
   check("same source, nothing entered",

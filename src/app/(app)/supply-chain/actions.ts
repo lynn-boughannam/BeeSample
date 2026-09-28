@@ -7,6 +7,7 @@ import {
   ALLOWED_DOCUMENT_TYPES,
   canEditSupplierSubmission,
   canSubmitSupplierToCss,
+  orderStatusAfterCssSubmission,
   MAX_DOCUMENTS_PER_UPLOAD,
   MAX_DOCUMENT_BYTES,
   MAX_UPLOAD_TOTAL_BYTES,
@@ -290,9 +291,24 @@ export async function submitSupplierToCss(
   }
 
   try {
-    await prisma.sampleOrderSupplier.update({
-      where: { id: orderSupplierId },
-      data: { submittedToCssAt: new Date() },
+    await prisma.$transaction(async (tx) => {
+      await tx.sampleOrderSupplier.update({
+        where: { id: orderSupplierId },
+        data: { submittedToCssAt: new Date() },
+      });
+
+      // Read back inside the transaction: whether this was the last option to hand over has
+      // to be judged against the row just written, not the one loaded before it.
+      const siblings = await tx.sampleOrderSupplier.findMany({
+        where: { orderId: row.order.id },
+        select: { submittedToCssAt: true },
+      });
+
+      // With every option handed over, Supply Chain's step is done and the wait is CSS's.
+      const next = orderStatusAfterCssSubmission(siblings);
+      if (next) {
+        await tx.sampleOrder.update({ where: { id: row.order.id }, data: { status: next } });
+      }
     });
   } catch (error) {
     console.error("submitSupplierToCss failed", error);

@@ -70,7 +70,10 @@ export default async function CssReviewPage() {
   const [pendingOrders, reviewedOrders] = await Promise.all([
     prisma.sampleOrder.findMany({
       where: {
-        status: "APPROVED_PENDING_SUPPLY_CHAIN",
+        // Both work-up statuses: a request whose options went to CSS one at a time is still
+        // at Supply Chain's status until the last one is handed over, and CSS can already
+        // review the ones that have been.
+        status: { in: ["APPROVED_PENDING_SUPPLY_CHAIN", "DETAILS_SUBMITTED_AWAITING_CSS"] },
         suppliers: { some: { submittedToCssAt: { not: null }, cssDecision: "PENDING" } },
       },
       select: orderSelect,

@@ -122,9 +122,14 @@ async function main() {
     testUsers.every((u) => u.isActive), true);
 
   console.log("\n=== order status sequence ===");
-  check("eight statuses", ORDER_STATUSES.length, 8);
+  check("nine statuses", ORDER_STATUSES.length, 9);
   check("starts at Submitted", ORDER_STATUSES[0], "SUBMITTED");
   check("ends at Received", ORDER_STATUSES[ORDER_STATUSES.length - 1], "RECEIVED");
+  // The order they are declared in is the order the workflow runs in, which the progress
+  // bar reads positionally — so the CSS wait has to sit between the two steps it separates.
+  check("the CSS wait sits between Supply Chain and the Formulator",
+    ORDER_STATUSES.filter((s) => s !== "REJECTED").slice(1, 4).join(","),
+    "APPROVED_PENDING_SUPPLY_CHAIN,DETAILS_SUBMITTED_AWAITING_CSS,COSTING_SUBMITTED_PENDING_FORMULATOR");
   check("every status has a label",
     ORDER_STATUSES.every((s) => Boolean(ORDER_STATUS_LABELS[s])), true);
   // Nothing may be left on a status the new sequence doesn't contain.

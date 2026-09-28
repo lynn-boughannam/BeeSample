@@ -128,9 +128,41 @@ async function main() {
       approvedById: admin.id, decidedAt: new Date(), prNumber: "PR-9001",
     },
   });
+  // Waiting on this viewer to choose a supplier: CSS has approved one option and rejected
+  // the other, which is what moves a request to this status.
+  await prisma.sampleOrder.create({
+    data: {
+      requestType: "NEW", inciName: PREFIX + "MYCHOICE", supplier1: "Acme", supplier2: "Globex",
+      orderedById: admin.id, status: "COSTING_SUBMITTED_PENDING_FORMULATOR",
+      directorApprovalConfirmed: true, approvedById: admin.id, decidedAt: new Date(),
+      suppliers: {
+        create: [
+          { position: 1, supplierName: PREFIX + "Acme", landedPrice: "11.00", moq: "25 kg",
+            documentsReceivedAt: new Date(), submittedToCssAt: new Date(),
+            cssDecision: "APPROVED", cssDecisionAt: new Date() },
+          { position: 2, supplierName: PREFIX + "Globex", landedPrice: "12.00", moq: "25 kg",
+            documentsReceivedAt: new Date(), submittedToCssAt: new Date(),
+            cssDecision: "REJECTED", cssDecisionAt: new Date(), cssNote: "Docs incomplete" },
+        ],
+      },
+    },
+  });
 
   try {
-    const after = await loadAdminDashboard();
+    const after = await loadAdminDashboard(admin.id);
+
+    // The prompt that tells a requester the decision is theirs. It was queried on Supply
+    // Chain's status while the gate had moved to the costing status, so it silently returned
+    // nothing — a whole feature dead with every suite still green.
+    console.log("\n=== the requester is told when a choice is theirs ===");
+    const mine = after.awaitingMyChoice.filter((o) => o.label.includes(PREFIX));
+    check("the seeded request is listed", mine.length, 1);
+    check("and only the approved option made it eligible",
+      after.awaitingMyChoice.some((o) => o.label.includes("INPROGRESS")), false);
+    // Someone else's request is not theirs to decide.
+    const others = await loadAdminDashboard(formulator.id);
+    check("not shown to anyone else",
+      others.awaitingMyChoice.some((o) => o.label.includes(PREFIX)), false);
 
     console.log("\n=== AC1: KPI row carries real counts ===");
     check("total samples +3 (discarded excluded)", after.kpis.totalSamples - before.kpis.totalSamples, 3);
@@ -139,7 +171,9 @@ async function main() {
     check("pending requests +1", after.kpis.pendingRequests - before.kpis.pendingRequests, 1);
     check("checked out +1", after.kpis.checkedOut - before.kpis.checkedOut, 1);
     check("new orders +1", after.kpis.newOrders - before.kpis.newOrders, 1);
-    check("orders in progress +1", after.kpis.ordersInProgress - before.kpis.ordersInProgress, 1);
+    // Two seeded orders sit mid-workflow now: the PR-issued one and the one awaiting this
+    // viewer's choice. Both are being actively worked, which is what the tile counts.
+    check("orders in progress +2", after.kpis.ordersInProgress - before.kpis.ordersInProgress, 2);
     check("feedback due +1 (only the unreported one)", after.kpis.feedbackDue - before.kpis.feedbackDue, 1);
 
     console.log("\n=== Stock health strip ===");
@@ -227,6 +261,9 @@ async function main() {
     await prisma.transaction.deleteMany({ where: { sample: { sampleCode: { startsWith: PREFIX } } } });
     await prisma.sampleRequest.deleteMany({
       where: { id: { in: [pendingReq.id, approvedNoFeedback.id, approvedWithFeedback.id] } },
+    });
+    await prisma.sampleOrderSupplier.deleteMany({
+      where: { order: { inciName: { startsWith: PREFIX } } },
     });
     await prisma.sampleOrder.deleteMany({ where: { inciName: { startsWith: PREFIX } } });
     await prisma.samplePiece.deleteMany({ where: { sample: { sampleCode: { startsWith: PREFIX } } } });

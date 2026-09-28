@@ -2,19 +2,19 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { PrismaMssql } from "@prisma/adapter-mssql";
 import { parseMssqlUrl } from "./src/lib/mssql-url";
-import { orderStatusAfterCssDecision } from "./src/lib/orders";
+import { orderStatusAfterCssDecision, orderStatusAfterCssSubmission } from "./src/lib/orders";
 
 /**
  * One-off: move requests that CSS already finished with on to the status they should have
  * reached at the time.
  *
- * Until now the CSS decision didn't touch the order, so a request whose every option had
- * been approved still read "Approved – Pending Supply Chain" — which is what the requester
- * complained about. The action advances it from here on; these are the rows decided before
- * it did.
+ * Until now neither handing a supplier to CSS nor deciding it touched the order, so a request
+ * whose every option had been approved still read "Approved – Pending Supply Chain" — which is
+ * what the requester complained about. The actions advance it from here on; these are the rows
+ * that moved before they did.
  *
- * Judged with orderStatusAfterCssDecision, the same function the action uses, so this can't
- * drift from it. Dry run unless --apply is passed.
+ * Judged with the same two functions the actions use, so this can't drift from them: the
+ * decision rule first, since it wins wherever both apply. Dry run unless --apply is passed.
  */
 const apply = process.argv.includes("--apply");
 
@@ -27,15 +27,18 @@ async function main() {
     where: { status: "APPROVED_PENDING_SUPPLY_CHAIN" },
     include: {
       existingSample: { select: { sampleCode: true } },
-      suppliers: { select: { cssDecision: true } },
+      suppliers: { select: { cssDecision: true, submittedToCssAt: true } },
     },
   });
 
   const moving: Array<{ id: string; request: string; from: string; to: string }> = [];
   for (const order of orders) {
-    const next = orderStatusAfterCssDecision(order.suppliers);
-    // Nothing to do while an option is still undecided — that request really is with
-    // Supply Chain.
+    // Decision first: an order CSS has finished with belongs past the CSS wait, not in it.
+    const next =
+      orderStatusAfterCssDecision(order.suppliers) ??
+      orderStatusAfterCssSubmission(order.suppliers);
+    // Nothing to do while an option hasn't even been handed over — that request really is
+    // still with Supply Chain.
     if (!next) continue;
     moving.push({
       id: order.id,
@@ -47,7 +50,7 @@ async function main() {
 
   console.log(`${orders.length} request(s) at APPROVED_PENDING_SUPPLY_CHAIN`);
   if (moving.length === 0) {
-    console.log("None of them have been decided — nothing to backfill.");
+    console.log("None of them have been handed over or decided — nothing to backfill.");
     await prisma.$disconnect();
     return;
   }
