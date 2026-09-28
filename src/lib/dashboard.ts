@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { loadSampleStock } from "@/lib/stock-queries";
 import { loadCategoryColors } from "@/lib/shelf";
 import { stockLevel, EMPTY_STOCK, type StockLevel, type SampleStock } from "@/lib/stock";
-import { orderLabel } from "@/lib/orders";
+import { checkSelectionReady, orderLabel } from "@/lib/orders";
 
 // Everything the Admin dashboard shows, assembled in one place so the page stays a
 // rendering concern and the numbers can be verified without a browser (SLT-59).
@@ -20,6 +20,11 @@ export type DashboardKpis = {
 };
 
 export type CategoryBar = { category: string; count: number; colorHex: string };
+
+// A request this Admin raised themselves, whose options CSS has finished with. Admins raise
+// requests here as often as Formulators do, so the decision that is theirs as requester has
+// to reach them too — the review queue above it is a different job.
+export type AwaitingMyChoice = { id: string; label: string };
 
 export type CheckedOutPiece = {
   pieceId: string;
@@ -53,6 +58,8 @@ export type ActivityEntry = {
 };
 
 export type AdminDashboard = {
+  // Requests this viewer raised that are waiting on them to choose a supplier.
+  awaitingMyChoice: AwaitingMyChoice[];
   kpis: DashboardKpis;
   stockHealth: { healthy: number; zero: number; total: number };
   byCategory: CategoryBar[];
@@ -72,7 +79,10 @@ const TRANSACTION_KINDS = new Set(["RECEIPT", "CHECKOUT", "RETURN_USAGE", "DISCA
 const activityKindOf = (type: string): ActivityKind =>
   TRANSACTION_KINDS.has(type) ? (type as ActivityKind) : "RECEIPT";
 
-export async function loadAdminDashboard(): Promise<AdminDashboard> {
+export async function loadAdminDashboard(
+  // Whose requests to check for a pending supplier choice. Optional so the reporting
+  // suites can load the dashboard without a session.
+  viewerId?: string): Promise<AdminDashboard> {
   // Discarded samples are excluded from every stock figure: they're out of the library, and
   // SLT-26 gives them their own flag rather than counting them as zero stock. Keeping them
   // out here is also what makes healthy + low + zero add up to Total Samples.
@@ -168,7 +178,22 @@ export async function loadAdminDashboard(): Promise<AdminDashboard> {
     a.formulatorName.localeCompare(b.formulatorName)
   );
 
+  // Requests this viewer raised that are waiting on them to choose a supplier.
+  const myOrders = viewerId
+    ? await prisma.sampleOrder.findMany({
+        where: { orderedById: viewerId, status: "APPROVED_PENDING_SUPPLY_CHAIN" },
+        include: {
+          existingSample: { select: { sampleCode: true, rmName: true } },
+          suppliers: { select: { cssDecision: true } },
+        },
+      })
+    : [];
+  const awaitingMyChoice: AwaitingMyChoice[] = myOrders
+    .filter((o) => checkSelectionReady(o, o.suppliers).ok)
+    .map((o) => ({ id: o.id, label: orderLabel(o) }));
+
   return {
+    awaitingMyChoice,
     kpis: {
       totalSamples: samples.length,
       zeroStock: zero,

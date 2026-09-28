@@ -4,7 +4,8 @@ import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { AdminDashboard } from "./admin-dashboard";
 import { CheckoutSince, checkoutRowClass } from "@/components/checkout-since";
-import { orderLabel } from "@/lib/orders";
+import { checkSelectionReady, orderLabel } from "@/lib/orders";
+import { ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/types";
 
 async function FormulatorDashboard({ userId }: { userId: string }) {
   const [myRequests, myOrders, feedbackDue, myPieces] = await Promise.all([
@@ -16,6 +17,8 @@ async function FormulatorDashboard({ userId }: { userId: string }) {
     }),
     prisma.sampleOrder.findMany({
       where: { orderedById: userId },
+      // Enough to tell whether this request is waiting on a decision from them.
+      include: { suppliers: { select: { cssDecision: true } } },
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
@@ -32,14 +35,42 @@ async function FormulatorDashboard({ userId }: { userId: string }) {
     }),
   ]);
 
+  // Phase 5 — a request whose options CSS has finished with is waiting on the person who
+  // raised it. Nothing else tells them that, so the dashboard has to.
+  const needsMyChoice = myOrders.filter((o) => checkSelectionReady(o, o.suppliers).ok);
+
   return (
     <div className="space-y-8">
       <h1 className="text-page-title text-neutral-dark">Dashboard</h1>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {needsMyChoice.length > 0 && (
+        <section className="rounded-lg border border-brand-secondary/30 bg-brand-primary/[0.08] p-4">
+          <h2 className="text-section-header text-neutral-dark">
+            {needsMyChoice.length} request{needsMyChoice.length === 1 ? "" : "s"} waiting on you
+          </h2>
+          <p className="text-caption mt-0.5 mb-3 text-neutral-dark/70">
+            Their supplier documents have been reviewed. Choose a supplier, or decline.
+          </p>
+          <ul className="space-y-1.5">
+            {needsMyChoice.map((o) => (
+              <li key={o.id}>
+                <Link
+                  href={`/orders/${o.id}`}
+                  className="text-body font-medium text-neutral-dark underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
+                >
+                  {orderLabel(o)}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard label="Currently With You" value={myPieces.length} />
         <StatCard label="My Requests" value={myRequests.length} />
         <StatCard label="My Orders" value={myOrders.length} />
+        <StatCard label="Waiting On You" value={needsMyChoice.length} />
         <StatCard label="Feedback Due" value={feedbackDue.length} />
       </div>
 
@@ -102,7 +133,11 @@ async function FormulatorDashboard({ userId }: { userId: string }) {
           <Empty />
         ) : (
           <Table
-            rows={myOrders.map((o) => [orderLabel(o), o.supplierName ?? o.supplier1 ?? "—", o.status])}
+            rows={myOrders.map((o) => [
+              orderLabel(o),
+              o.supplierName ?? o.supplier1 ?? "—",
+              ORDER_STATUS_LABELS[o.status as OrderStatus] ?? o.status,
+            ])}
             headers={["RM", "Supplier", "Status"]}
           />
         )}
@@ -115,7 +150,7 @@ export default async function DashboardPage() {
   const session = await verifySession();
 
   const role = session.user.role;
-  if (role === "ADMIN") return <AdminDashboard />;
+  if (role === "ADMIN") return <AdminDashboard viewerId={session.user.id} />;
   // The sample order workflow roles have no screens yet — their phases come later. A
   // placeholder is deliberate: dropping them into the Formulator dashboard would show
   // them someone else's view of the data and read as a bug.

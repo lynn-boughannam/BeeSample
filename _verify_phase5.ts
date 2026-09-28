@@ -94,6 +94,20 @@ async function main() {
   check("rejected outright", checkSelectionReady({ status: "REJECTED" }, [appr]).ok, false);
   check("still with the Admin", checkSelectionReady({ status: "SUBMITTED" }, [appr]).ok, false);
 
+  console.log("\n=== declining is gated the same way ===");
+  // Declining is the other half of the same decision, so it opens and closes together with
+  // choosing — never available earlier, never left available afterwards.
+  check("blocked while one is under review", checkDeclineReady(OPEN, [appr, pend]).ok, false);
+  check("available once all are decided", checkDeclineReady(OPEN, [appr, rej]).ok, true);
+  check("not after a supplier was chosen",
+    checkDeclineReady({ status: "SUPPLIER_SELECTED" }, [appr]).ok, false);
+  check("nothing to decline when CSS rejected everything",
+    checkDeclineReady(OPEN, [rej, rej]).ok, false);
+  check("the two gates agree on every shape",
+    [[appr, pend], [appr, rej], [rej, rej], []].every(
+      (s) => checkDeclineReady(OPEN, s).ok === checkSelectionReady(OPEN, s).ok
+    ), true);
+
   console.log("\n=== who may choose ===");
   const order = { orderedById: "u-formulator" };
   check("the person who raised it",

@@ -35,8 +35,9 @@ const ACTIVITY_TONE: Record<ActivityKind, string> = {
   FEEDBACK: "bg-brand-soft/40 text-neutral-dark",
 };
 
-export async function AdminDashboard() {
-  const { kpis, stockHealth, byCategory, checkedOut, activity } = await loadAdminDashboard();
+export async function AdminDashboard({ viewerId }: { viewerId: string }) {
+  const { kpis, stockHealth, byCategory, checkedOut, activity, awaitingMyChoice } =
+    await loadAdminDashboard(viewerId);
 
   const tiles: Kpi[] = [
     { label: "Total Samples", value: kpis.totalSamples, href: "/library" },
@@ -52,6 +53,32 @@ export async function AdminDashboard() {
   return (
     <div className="space-y-6">
       <h1 className="text-page-title text-neutral-dark">Dashboard</h1>
+
+      {/* An Admin raises requests here as often as a Formulator does, and the choice of
+          supplier on their own request is theirs — separate from the review queue below. */}
+      {awaitingMyChoice.length > 0 && (
+        <section className="rounded-lg border border-brand-secondary/30 bg-brand-primary/[0.08] p-4">
+          <h2 className="text-section-header text-neutral-dark">
+            {awaitingMyChoice.length} of your request
+            {awaitingMyChoice.length === 1 ? " is" : "s are"} waiting on you
+          </h2>
+          <p className="text-caption mt-0.5 mb-3 text-neutral-dark/70">
+            Their supplier documents have been reviewed. Choose a supplier, or decline.
+          </p>
+          <ul className="flex flex-wrap gap-x-4 gap-y-1">
+            {awaitingMyChoice.map((o) => (
+              <li key={o.id}>
+                <Link
+                  href={`/orders/${o.id}`}
+                  className="text-body font-medium text-neutral-dark underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
+                >
+                  {o.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {tiles.map((tile) => (

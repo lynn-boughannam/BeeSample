@@ -19,6 +19,7 @@ import {
   ORDER_REQUEST_TYPE_LABELS,
   PLACEHOLDER_NOTE,
   orderLabel,
+  checkSelectionReady,
   orderWaitingOn,
   type OrderRequestType,
 } from "@/lib/orders";
@@ -137,6 +138,12 @@ export default async function OrdersPage({
     ])
   );
 
+  // Phase 5 — requests waiting on THIS person to choose a supplier. The Admin banner above
+  // covers their review queue; this covers the decision that is theirs as requester.
+  const needsMyChoice = orders.filter(
+    (o) => o.orderedById === session.user.id && checkSelectionReady(o, o.suppliers).ok
+  );
+
   const filtered = Boolean(query || type || status);
 
   return (
@@ -174,6 +181,30 @@ export default async function OrdersPage({
           </span>
           <span className="text-neutral-dark/60">— open the queue</span>
         </Link>
+      )}
+
+      {needsMyChoice.length > 0 && (
+        <div className="rounded-lg border border-brand-secondary/30 bg-brand-primary/[0.08] px-4 py-3">
+          <p className="text-body text-neutral-dark">
+            <span className="font-semibold">
+              {needsMyChoice.length} of your request{needsMyChoice.length === 1 ? "" : "s"}{" "}
+              {needsMyChoice.length === 1 ? "is" : "are"} waiting for you to choose a supplier
+            </span>{" "}
+            <span className="text-neutral-dark/60">— their documents have been reviewed.</span>
+          </p>
+          <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+            {needsMyChoice.map((o) => (
+              <li key={o.id}>
+                <Link
+                  href={`/orders/${o.id}`}
+                  className="text-caption font-medium text-neutral-dark underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
+                >
+                  {orderLabel(o)}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <OrderFilters q={query} type={type} status={status} />
