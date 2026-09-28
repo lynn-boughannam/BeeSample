@@ -29,13 +29,14 @@ import { ReviewPanel } from "./review-panel";
 import { approveOrder, rejectOrder } from "./review-actions";
 import { SelectionPanel, type SelectableSupplier } from "./selection-panel";
 import { declineAllSuppliers, selectSupplier } from "./selection-actions";
-import { DocumentPanel, type SupplierDocument } from "../../supply-chain/document-panel";
-import { PricingForm } from "../../supply-chain/pricing-form";
+import {
+  SupplierEntryForm,
+  type SupplierDocument,
+} from "../../supply-chain/supplier-entry-form";
 import { SubmitToCssButton } from "../../supply-chain/submit-button";
 import {
-  attachSupplierDocuments,
   deleteSupplierDocument,
-  saveSupplierPricing,
+  saveSupplierSubmission,
   submitSupplierToCss,
 } from "../../supply-chain/actions";
 import {
@@ -412,49 +413,40 @@ export default async function OrderDetailPage({
                   <p className="text-caption mt-2 text-neutral-dark/70">{s.cssNote}</p>
                 )}
 
-                {/* Phase 2 — attaching sits with the details, so Samer reads what the
-                    material is before handling its paperwork. Several per supplier is
-                    normal: a COA and an SDS usually arrive together. */}
-                {skipsDocuments ? (
-                  <p className="text-caption mt-3 text-neutral-dark/60">
-                    No documents chased — same supplier as before.
-                  </p>
-                ) : (
-                  <DocumentPanel
-                    orderSupplierId={s.id}
-                    supplierName={s.supplierName}
-                    documents={s.documents.map(
-                      (d): SupplierDocument => ({
-                        id: d.id,
-                        fileName: d.fileName,
-                        sizeBytes: d.sizeBytes,
-                        uploadedAt: day(d.uploadedAt),
-                        uploadedByName: d.uploadedBy?.name ?? null,
-                      })
-                    )}
-                    canEdit={isSupplyChain && isAwaitingSupplyChain(status) && editable}
-                    attachAction={attachSupplierDocuments}
-                    deleteAction={deleteSupplierDocument}
-                  />
-                )}
+                {/* Phases 2 and 3 — recording the reply sits with the details, so Samer
+                    reads what the material is before handling its paperwork. Documents and
+                    terms save together: they arrive together, in one email. */}
+                <SupplierEntryForm
+                  orderSupplierId={s.id}
+                  supplierName={s.supplierName}
+                  documents={s.documents.map(
+                    (d): SupplierDocument => ({
+                      id: d.id,
+                      fileName: d.fileName,
+                      sizeBytes: d.sizeBytes,
+                      uploadedAt: day(d.uploadedAt),
+                      uploadedByName: d.uploadedBy?.name ?? null,
+                    })
+                  )}
+                  acceptsDocuments={!skipsDocuments}
+                  canEdit={isSupplyChain && isAwaitingSupplyChain(status) && editable}
+                  landedPrice={s.landedPrice?.toString() ?? ""}
+                  moq={s.moq ?? ""}
+                  saveAction={saveSupplierSubmission}
+                  deleteAction={deleteSupplierDocument}
+                />
 
-                {isSupplyChain && isAwaitingSupplyChain(status) && editable && (
-                  <>
-                    <PricingForm
+                {/* Submitting stays its own button. It locks the row, so it is a decision
+                    Samer takes once the saved figures look right — not a side effect of
+                    typing them. */}
+                {isSupplyChain && isAwaitingSupplyChain(status) && editable &&
+                  stage === "READY_TO_SUBMIT" && (
+                    <SubmitToCssButton
                       orderSupplierId={s.id}
-                      landedPrice={s.landedPrice?.toString() ?? ""}
-                      moq={s.moq ?? ""}
-                      action={saveSupplierPricing}
+                      supplierName={s.supplierName}
+                      action={submitSupplierToCss}
                     />
-                    {stage === "READY_TO_SUBMIT" && (
-                      <SubmitToCssButton
-                        orderSupplierId={s.id}
-                        supplierName={s.supplierName}
-                        action={submitSupplierToCss}
-                      />
-                    )}
-                  </>
-                )}
+                  )}
                 {!editable && (
                   <p className="text-caption mt-3 text-neutral-dark/60">
                     Sent to CSS {s.submittedToCssAt ? day(s.submittedToCssAt) : ""} — locked.

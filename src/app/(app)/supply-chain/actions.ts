@@ -16,9 +16,9 @@ import {
 } from "@/lib/orders";
 import type { OrderStatus } from "@/lib/types";
 
-// Phase 2 — Supply Chain attaches the documents that came back from a supplier. Attaching
-// is what closes that supplier's step; the SLA it is measured against started when the
-// request was approved, not when anything was logged here.
+// Phases 2 and 3 — Supply Chain records what came back from a supplier: its documents and
+// the terms it quoted. Attaching is what closes that supplier's step; the SLA it is measured
+// against started when the request was approved, not when anything was logged here.
 
 export type DocumentUploadState = { error?: string; ok?: string } | undefined;
 
@@ -31,12 +31,15 @@ async function requireSupplyChain() {
   return session;
 }
 
-export async function attachSupplierDocuments(
+// Whatever a supplier sent back, recorded in one go. Two forms meant two saves to log one
+// email, and a row that was half-entered in between; this takes the files, the terms, or
+// both, and complains only about what it was actually given.
+export async function saveSupplierSubmission(
   _prev: DocumentUploadState,
   formData: FormData
 ): Promise<DocumentUploadState> {
   const session = await requireSupplyChain();
-  if (!session) return { error: "Only Supply Chain can attach supplier documents." };
+  if (!session) return { error: "Only Supply Chain can record a supplier's reply." };
 
   const orderSupplierId = String(formData.get("orderSupplierId") ?? "");
   if (!orderSupplierId) return { error: "Which supplier?" };
@@ -51,11 +54,6 @@ export async function attachSupplierDocuments(
   if (!isAwaitingSupplyChain(row.order.status as OrderStatus)) {
     return { error: "This request isn't with Supply Chain." };
   }
-  if (!needsDocumentRequest(row.order.requestType as OrderRequestType)) {
-    return {
-      error: "This is a repeat order from the same source — its documents are already on file.",
-    };
-  }
   if (!canEditSupplierSubmission(row)) {
     return { error: `${row.supplierName} has been sent to CSS and can no longer be changed.` };
   }
@@ -66,16 +64,18 @@ export async function attachSupplierDocuments(
     .getAll("documents")
     .filter((f): f is File => f instanceof File && f.size > 0);
 
-  if (files.length === 0) return { error: "Choose at least one file to attach." };
+  const wantsDocuments = needsDocumentRequest(row.order.requestType as OrderRequestType);
+  if (files.length > 0 && !wantsDocuments) {
+    return {
+      error: "This is a repeat order from the same source — its documents are already on file.",
+    };
+  }
   if (files.length > MAX_DOCUMENTS_PER_UPLOAD) {
     return { error: `Attach at most ${MAX_DOCUMENTS_PER_UPLOAD} files at a time.` };
   }
-
-  const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
-  if (totalBytes > MAX_UPLOAD_TOTAL_BYTES) {
+  if (files.reduce((sum, f) => sum + f.size, 0) > MAX_UPLOAD_TOTAL_BYTES) {
     return { error: "That's more than 20 MB at once. Attach them in smaller batches." };
   }
-
   for (const file of files) {
     if (file.size > MAX_DOCUMENT_BYTES) {
       return { error: `${file.name} is larger than 10 MB.` };
@@ -83,6 +83,32 @@ export async function attachSupplierDocuments(
     if (file.type && !ALLOWED_DOCUMENT_TYPES.has(file.type)) {
       return { error: `${file.name} isn't a document type we accept (PDF, image, Word or Excel).` };
     }
+  }
+
+  // Landed price and MOQ are what CSS weighs one option against another with, so they move
+  // as a pair: both or neither. Neither is allowed on purpose — paperwork usually turns up
+  // before the quote does, and it shouldn't have to wait for it.
+  const rawPrice = String(formData.get("landedPrice") ?? "").trim();
+  const moq = String(formData.get("moq") ?? "").trim();
+  let price: string | null = null;
+  if (rawPrice || moq) {
+    if (!rawPrice) return { error: "Enter the landed price as well — CSS compares the two." };
+    if (!moq) return { error: "Enter the MOQ as well — CSS compares the two." };
+    const parsed = Number(rawPrice);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return { error: "The landed price must be a number that isn't negative." };
+    }
+    // Held as a string so the Decimal column keeps the exact figure quoted, rather than
+    // whatever a float rounds it to.
+    price = parsed.toFixed(2);
+  }
+
+  if (files.length === 0 && price === null) {
+    return {
+      error: wantsDocuments
+        ? "Nothing to save — choose a document, or fill in the price and MOQ."
+        : "Nothing to save — fill in the price and MOQ.",
+    };
   }
 
   // Read every file before opening the transaction: a slow read shouldn't hold one open.
@@ -104,25 +130,34 @@ export async function attachSupplierDocuments(
         });
       }
 
-      // Stamped on the first attachment, which is what stops this supplier's SLA clock.
-      // Later attachments don't move it — the documents were in hand from the first one.
-      if (!row.documentsReceivedAt) {
-        await tx.sampleOrderSupplier.update({
-          where: { id: orderSupplierId },
-          data: { documentsReceivedAt: new Date() },
-        });
+      // documentsReceivedAt is stamped on the first attachment, which is what stops this
+      // supplier's SLA clock. Later attachments don't move it — the documents were in hand
+      // from the first one.
+      const data: { documentsReceivedAt?: Date; landedPrice?: string; moq?: string } = {};
+      if (payloads.length > 0 && !row.documentsReceivedAt) data.documentsReceivedAt = new Date();
+      if (price !== null) {
+        data.landedPrice = price;
+        data.moq = moq;
+      }
+      if (Object.keys(data).length > 0) {
+        await tx.sampleOrderSupplier.update({ where: { id: orderSupplierId }, data });
       }
     });
   } catch (error) {
-    console.error("attachSupplierDocuments failed", error);
-    return { error: "Could not attach those documents. Try again." };
+    console.error("saveSupplierSubmission failed", error);
+    return { error: "Could not save that. Try again." };
   }
 
   revalidatePath("/supply-chain");
   revalidatePath(`/orders/${row.order.id}`);
 
   const n = payloads.length;
-  return { ok: `Attached ${n} document${n === 1 ? "" : "s"} for ${row.supplierName}.` };
+  const parts = [
+    n > 0 ? `attached ${n} document${n === 1 ? "" : "s"}` : null,
+    price !== null ? "saved price and MOQ" : null,
+  ].filter(Boolean);
+  const said = parts.join(" and ");
+  return { ok: `${said.charAt(0).toUpperCase()}${said.slice(1)} for ${row.supplierName}.` };
 }
 
 // Kept separate from attaching: telling a supplier you need their paperwork and actually
@@ -210,56 +245,6 @@ export async function deleteSupplierDocument(
   revalidatePath("/supply-chain");
   revalidatePath(`/orders/${doc.orderSupplier.order.id}`);
   return { ok: `Removed ${doc.fileName}.` };
-}
-
-// Phase 3 — the quoted terms for one supplier. Landed price and MOQ together are what
-// CSS compares between options, so both are required: a price without an MOQ can't be
-// weighed against one that has it.
-export async function saveSupplierPricing(
-  _prev: DocumentUploadState,
-  formData: FormData
-): Promise<DocumentUploadState> {
-  const session = await requireSupplyChain();
-  if (!session) return { error: "Only Supply Chain can enter supplier pricing." };
-
-  const orderSupplierId = String(formData.get("orderSupplierId") ?? "");
-  const rawPrice = String(formData.get("landedPrice") ?? "").trim();
-  const moq = String(formData.get("moq") ?? "").trim();
-
-  const row = await prisma.sampleOrderSupplier.findUnique({
-    where: { id: orderSupplierId },
-    include: { order: { select: { id: true, status: true } } },
-  });
-  if (!row) return { error: "That supplier is no longer on the request." };
-  if (!isAwaitingSupplyChain(row.order.status as OrderStatus)) {
-    return { error: "This request isn't with Supply Chain." };
-  }
-  if (!canEditSupplierSubmission(row)) {
-    return { error: `${row.supplierName} has been sent to CSS and can no longer be repriced.` };
-  }
-
-  if (!rawPrice) return { error: "Enter the landed price." };
-  const price = Number(rawPrice);
-  if (!Number.isFinite(price) || price < 0) {
-    return { error: "The landed price must be a number that isn't negative." };
-  }
-  if (!moq) return { error: "Enter the MOQ." };
-
-  try {
-    await prisma.sampleOrderSupplier.update({
-      where: { id: orderSupplierId },
-      // Stored as a string so the Decimal column keeps the exact figure quoted, rather
-      // than whatever a float rounds it to.
-      data: { landedPrice: price.toFixed(2), moq },
-    });
-  } catch (error) {
-    console.error("saveSupplierPricing failed", error);
-    return { error: "Could not save that pricing. Try again." };
-  }
-
-  revalidatePath("/supply-chain");
-  revalidatePath(`/orders/${row.order.id}`);
-  return { ok: `Saved price and MOQ for ${row.supplierName}.` };
 }
 
 // Handing one supplier to CSS. An explicit step rather than something implied by the

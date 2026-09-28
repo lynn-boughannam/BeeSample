@@ -233,8 +233,8 @@ async function main() {
     check("a Formulator still only sees their own",
       /!worksOrders && order\.orderedById !== session\.user\.id/.test(detail), true);
     check("deciding stays Admin-only", /isAdmin && isAwaitingAdminReview\(status\)/.test(detail), true);
-    check("the attach panel sits with the details", /<DocumentPanel/.test(detail), true);
-    check("attaching is what closes the step", /attachSupplierDocuments/.test(detail), true);
+    check("the entry form sits with the details", /<SupplierEntryForm/.test(detail), true);
+    check("attaching is what closes the step", /saveSupplierSubmission/.test(detail), true);
 
     const nav = readFileSync("src/lib/nav.ts", "utf8");
     check("Supply Chain has a nav entry",

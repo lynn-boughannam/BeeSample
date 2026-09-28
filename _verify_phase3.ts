@@ -239,17 +239,20 @@ async function main() {
 
     console.log("\n=== wiring ===");
     const action = readFileSync("src/app/(app)/supply-chain/actions.ts", "utf8");
-    check("only Supply Chain prices", /Only Supply Chain can enter supplier pricing/.test(action), true);
-    check("both fields are required", /Enter the landed price[\s\S]*Enter the MOQ/.test(action), true);
-    check("a negative price is refused", /price < 0/.test(action), true);
-    check("the exact figure is kept", /price\.toFixed\(2\)/.test(action), true);
+    check("only Supply Chain prices", /Only Supply Chain can record a supplier's reply/.test(action), true);
+    // They move as a pair, so one without the other is refused — but neither is allowed,
+    // which is what lets paperwork be filed before the quote turns up.
+    check("the two fields move together", /Enter the landed price as well[\s\S]*Enter the MOQ as well/.test(action), true);
+    check("documents alone can still be saved", /files\.length === 0 && price === null/.test(action), true);
+    check("a negative price is refused", /parsed < 0/.test(action), true);
+    check("the exact figure is kept", /parsed\.toFixed\(2\)/.test(action), true);
     check("the order must be with Supply Chain", /isAwaitingSupplyChain/.test(action), true);
 
     // The lock has to hold on the server, not just by hiding a form.
     check("attaching is refused after submission",
       /can no longer be changed/.test(action), true);
     check("repricing is refused after submission",
-      /can no longer be repriced/.test(action), true);
+      /has been sent to CSS and can no longer be changed/.test(action), true);
     check("deleting a document is refused after submission",
       (action.match(/canEditSupplierSubmission/g) ?? []).length >= 4, true);
     check("submitting twice is refused", /has already been sent to CSS/.test(action), true);
@@ -316,12 +319,16 @@ async function main() {
 
     check("the detail page suppresses the document clock for a repeat order",
       /skipsDocuments\s*\?\s*\("NONE" as const\)/.test(detailSrc), true);
-    check("the pricing form lives on the request", /<PricingForm/.test(detailSrc), true);
-    check("and not in the queue", /<PricingForm/.test(queue), false);
+    check("the entry form lives on the request", /<SupplierEntryForm/.test(detailSrc), true);
+    check("and not in the queue", /<SupplierEntryForm/.test(queue), false);
 
-    const form = readFileSync("src/app/(app)/supply-chain/pricing-form.tsx", "utf8");
+    const form = readFileSync("src/app/(app)/supply-chain/supplier-entry-form.tsx", "utf8");
     check("the form asks for both together",
       /name="landedPrice"[\s\S]*name="moq"/.test(form), true);
+    // One button for one reply: the documents and the terms arrive in the same email.
+    check("documents and terms share the save",
+      /name="documents"[\s\S]*name="landedPrice"/.test(form), true);
+    check("and under one button", /{saving \? "Saving…" : "Save"}/.test(form), true);
   } finally {
     await prisma.sampleOrderSupplierDocument.deleteMany({
       where: { orderSupplier: { order: { inciName: { startsWith: PREFIX } } } },

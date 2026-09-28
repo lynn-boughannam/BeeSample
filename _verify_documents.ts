@@ -190,16 +190,21 @@ async function main() {
     check("several files per upload", /getAll\("documents"\)/.test(action), true);
     check("oversized files refused", /larger than 10 MB/.test(action), true);
     check("unexpected types refused", /ALLOWED_DOCUMENT_TYPES\.has/.test(action), true);
-    check("the received stamp is set once", /if \(!row\.documentsReceivedAt\)/.test(action), true);
+    check("the received stamp is set once",
+      /payloads\.length > 0 && !row\.documentsReceivedAt/.test(action), true);
     check("removing the last one clears it", /left === 0/.test(action), true);
 
     const route = readFileSync("src/app/api/order-documents/[id]/route.ts", "utf8");
     check("downloads require a session", /if \(!session\?\.user\)/.test(route), true);
     check("a stranger gets the same answer as a missing file", /Not found/.test(route), true);
 
-    const panel = readFileSync("src/app/(app)/supply-chain/document-panel.tsx", "utf8");
+    const panel = readFileSync("src/app/(app)/supply-chain/supplier-entry-form.tsx", "utf8");
     check("the picker takes several files", /multiple/.test(panel), true);
     check("documents link to the authenticated route", /api\/order-documents/.test(panel), true);
+    // A Remove is its own submission, so its form must stay a sibling of the save form —
+    // nesting one inside the other is invalid HTML and broke hydration once before.
+    check("the remove form isn't nested in the save form",
+      panel.indexOf('action={remove}') < panel.indexOf('action={save}'), true);
 
     // Rendering a list must never pull the file bytes back out of the database.
     for (const [name, src] of [["queue", sc], ["detail", detail]] as const) {
