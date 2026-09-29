@@ -41,3 +41,40 @@ export function sumCents(weights: number[]): number {
 export function pieceSumMessage(sumInCents: number, expectedInCents: number): string {
   return `Piece weights sum to ${centsToGrams(sumInCents)}g, expected ${centsToGrams(expectedInCents)}g.`;
 }
+
+/**
+ * How what arrived compares with what was asked for, when a sample is created by receiving
+ * an order.
+ *
+ * A difference is a fact to be shown, never an error to be blocked on: suppliers ship what
+ * they ship, and refusing to record 240 g because 250 g was requested would leave the
+ * library not knowing about material that is physically on the shelf. So this reports, and
+ * the screen shows a shortfall or an excess in red.
+ *
+ * Compared in cents for the same reason everything else here is — 0.1 + 0.2 is not 0.3, and
+ * a match that reads as a 0.00 g difference would be worse than no comparison at all.
+ */
+export type QuantityComparison =
+  | { kind: "UNKNOWN" }
+  | { kind: "MATCH" }
+  | { kind: "SHORT" | "OVER"; differenceG: string };
+
+export function compareQuantities(
+  requestedG: string | null | undefined,
+  receivedG: string | null | undefined
+): QuantityComparison {
+  // Older requests were raised before a quantity was asked for, and a blank received box is
+  // simply a form not filled in yet. Neither is a mismatch.
+  const requested = Number(requestedG);
+  const received = Number(receivedG);
+  if (
+    requestedG == null || String(requestedG).trim() === "" || !Number.isFinite(requested) ||
+    receivedG == null || String(receivedG).trim() === "" || !Number.isFinite(received)
+  ) {
+    return { kind: "UNKNOWN" };
+  }
+
+  const diff = toCents(received) - toCents(requested);
+  if (diff === 0) return { kind: "MATCH" };
+  return { kind: diff < 0 ? "SHORT" : "OVER", differenceG: centsToGrams(Math.abs(diff)) };
+}

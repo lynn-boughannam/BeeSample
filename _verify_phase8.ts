@@ -44,7 +44,7 @@ async function issue(orderId: string, role: string, raw: string) {
 
   await prisma.sampleOrder.update({
     where: { id: orderId },
-    data: { prNumber, status: orderStatusAfterPrIssued() },
+    data: { prNumber, prIssuedAt: new Date(), status: orderStatusAfterPrIssued() },
   });
 }
 
@@ -145,6 +145,7 @@ async function main() {
     await issue(built.id, "ADMIN", "  PR-2026-014 ");
     let now = await reload();
     check("stored trimmed", now.prNumber, "PR-2026-014");
+    check("and stamped with when", Boolean(now.prIssuedAt), true);
     check("and the request awaits the material", now.status, "PR_ISSUED_AWAITING_RECEIPT");
 
     console.log("\n--- and not a second time ---");
@@ -164,8 +165,8 @@ async function main() {
     check("the role is re-checked on the server",
       /canIssuePr\(session\.user\.role\)/.test(action), true);
     check("so is the status", /checkPrReady\(order\)/.test(action), true);
-    check("reference and status are written together",
-      /data: \{ prNumber, status: orderStatusAfterPrIssued\(\) \}/.test(action), true);
+    check("reference, date and status are written together",
+      /data: \{ prNumber, prIssuedAt: new Date\(\), status: orderStatusAfterPrIssued\(\) \}/.test(action), true);
 
     const detail = readFileSync("src/app/(app)/orders/[id]/page.tsx", "utf8");
     check("the panel shows only when a PR is due", /mayIssuePr && \(/.test(detail), true);

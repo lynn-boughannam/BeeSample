@@ -732,6 +732,53 @@ export function orderStatusAfterPrIssued(): OrderStatus {
   return "PR_ISSUED_AWAITING_RECEIPT";
 }
 
+// ---------------------------------------------------------------------------
+// Phase 9 — reception, and the sample it produces
+// ---------------------------------------------------------------------------
+
+/** Whether the request is waiting on the material turning up. */
+export function isAwaitingReceipt(status: OrderStatus): boolean {
+  return status === "PR_ISSUED_AWAITING_RECEIPT";
+}
+
+/** Receiving is the Admin's, like raising the PR: it records what happened, not a judgement. */
+export function canReceiveOrder(role: string): boolean {
+  return role === "ADMIN";
+}
+
+/**
+ * Whether a reception may be recorded, and if not, why.
+ *
+ * The produced-sample check is the one that matters. Receiving twice would put two samples
+ * on the shelf for one delivery, and the second would look exactly as real as the first.
+ */
+export function checkReceiptReady(order: {
+  status: string;
+  producedSampleId?: string | null;
+}): { ok: true } | { ok: false; reason: string } {
+  if (order.producedSampleId) {
+    return { ok: false, reason: "This request has already been received." };
+  }
+  if (order.status === "REJECTED") {
+    return { ok: false, reason: "This request was rejected." };
+  }
+  if (!isAwaitingReceipt(order.status as OrderStatus)) {
+    return {
+      ok: false,
+      reason:
+        order.status === "FORMULATOR_APPROVED_PENDING_PR"
+          ? "No PR has been raised for this request yet."
+          : "This request isn't waiting on a delivery.",
+    };
+  }
+  return { ok: true };
+}
+
+/** What an order becomes once its material is on the shelf. */
+export function orderStatusAfterReceipt(): OrderStatus {
+  return "RECEIVED";
+}
+
 /**
  * What an order's status should become once a supplier has been handed to CSS. Null means it
  * stays where it is.

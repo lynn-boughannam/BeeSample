@@ -53,6 +53,12 @@ export async function AdminDashboard({ viewerId }: { viewerId: string }) {
       value: kpis.awaitingPr,
       href: "/orders?status=FORMULATOR_APPROVED_PENDING_PR",
     },
+    // Ordered and on its way. Each of these becomes a library sample once it lands.
+    {
+      label: "Awaiting Delivery",
+      value: kpis.awaitingReceipt,
+      href: "/orders?status=PR_ISSUED_AWAITING_RECEIPT",
+    },
     { label: "Orders in Progress", value: kpis.ordersInProgress, href: "/orders" },
     { label: "Feedback Due", value: kpis.feedbackDue, href: "/pending-feedback" },
   ];

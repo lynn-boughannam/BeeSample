@@ -15,8 +15,10 @@ import {
   isAwaitingAdminReview,
   canApproveCosting,
   canIssuePr,
+  canReceiveOrder,
   checkCostingApprovalReady,
   checkPrReady,
+  checkReceiptReady,
   isAwaitingCosting,
   isAwaitingSupplyChain,
   isInSupplierWorkup,
@@ -164,6 +166,9 @@ export default async function OrderDetailPage({
   // Phase 8 — recording the PR is administrative, so it is the Admin's rather than the
   // requester's: the decision it acts on has already been made.
   const mayIssuePr = canIssuePr(role) && checkPrReady(order).ok;
+  // Phase 9 — reception is a page of its own rather than a panel: it creates a whole
+  // sample, with pieces and a shelf slot, and that does not fit beside a status track.
+  const mayReceive = canReceiveOrder(role) && checkReceiptReady(order).ok;
   // What the PR has to be raised for, summed once here rather than in the panel — the
   // figures are already on the row above, and two places computing a total is one too many.
   const costingTotal =
@@ -265,6 +270,25 @@ export default async function OrderDetailPage({
           requiredQuantityG={order.requiredQuantityG?.toString() ?? null}
           action={issuePurchaseRequisition}
         />
+      )}
+
+      {/* Phase 9 — the material has arrived and becomes a sample. */}
+      {mayReceive && (
+        <section className="rounded-lg border border-brand-secondary/40 bg-brand-primary/[0.06] p-5 shadow-elevated">
+          <h2 className="text-section-header text-neutral-dark">Receive the delivery</h2>
+          <p className="text-body mt-1 text-neutral-dark/70">
+            {order.prNumber ? `PR ${order.prNumber} was raised` : "The PR was raised"}
+            {chosenSupplier ? ` with ${chosenSupplier.supplierName}` : ""}
+            {order.requiredQuantityG ? `, for ${order.requiredQuantityG} g` : ""}. Recording
+            what arrived creates the library sample, with its pieces and shelf slot.
+          </p>
+          <Link
+            href={`/orders/${order.id}/receive`}
+            className="text-body mt-3 inline-flex items-center rounded-lg bg-brand-primary px-4 py-2 font-medium text-on-primary transition-[transform,opacity] duration-150 hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary focus-visible:ring-offset-2 active:scale-[0.98]"
+          >
+            Receive into the library
+          </Link>
+        </section>
       )}
 
       {/* Where the request has reached. Rejected isn't on the track — it ends it. */}

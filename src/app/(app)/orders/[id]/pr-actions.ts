@@ -50,7 +50,9 @@ export async function issuePurchaseRequisition(
   try {
     await prisma.sampleOrder.update({
       where: { id: orderId },
-      data: { prNumber, status: orderStatusAfterPrIssued() },
+      // prIssuedAt alongside the reference: "when" is half of what a PR is looked up for
+      // later, and nothing else on the row records it.
+      data: { prNumber, prIssuedAt: new Date(), status: orderStatusAfterPrIssued() },
     });
   } catch (error) {
     console.error("issuePurchaseRequisition failed", error);

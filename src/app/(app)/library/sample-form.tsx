@@ -13,6 +13,7 @@ import {
   sumCents,
   toCents,
   type PieceMode,
+  compareQuantities,
 } from "@/lib/pieces";
 import {
   DOCUMENT_AVAILABILITY,
@@ -110,6 +111,8 @@ export function SampleForm({
   suppliers,
   projects,
   initial,
+  requestedQuantityG,
+  orderId,
   submitLabel,
   cancelHref,
 }: {
@@ -123,6 +126,12 @@ export function SampleForm({
   suppliers: string[];
   projects: string[];
   initial?: SampleFormInitial;
+  // Set only when the sample is being created by receiving an order: what was asked for, so
+  // the received quantity can be checked against it as it is typed. Absent for direct entry,
+  // where there is nothing to compare against.
+  requestedQuantityG?: string | null;
+  // Set only when receiving an order, and posted alongside the sample.
+  orderId?: string;
   submitLabel: string;
   cancelHref: string;
 }) {
@@ -165,6 +174,9 @@ export function SampleForm({
 
   // Controlled so the piece-weight block can react as soon as both are filled in.
   const [qtyG, setQtyG] = useState(initial?.receivedQtyG ?? "");
+  // Recomputed as the box changes, so the discrepancy shows while it can still be checked
+  // against the delivery rather than after saving.
+  const quantityComparison = compareQuantities(requestedQuantityG, qtyG);
   const [qtyPcs, setQtyPcs] = useState(initial?.receivedQtyPcs ?? "");
   const [pieceMode, setPieceMode] = useState<PieceMode>("AUTO");
   const [manualWeights, setManualWeights] = useState<string[]>([]);
@@ -325,7 +337,10 @@ export function SampleForm({
 
   return (
     <form action={formAction} className="space-y-6">
-      {initial && <input type="hidden" name="id" value={initial.id} />}
+      {initial?.id && <input type="hidden" name="id" value={initial.id} />}
+      {/* Set only when receiving an order: the action needs to know which request the
+          sample it creates is closing. */}
+      {orderId && <input type="hidden" name="orderId" value={orderId} />}
 
       {/* Checked ingredients are submitted from state, not from the visible checkboxes.
           Filtering the list unmounts non-matching rows, so relying on DOM checkbox state
@@ -534,8 +549,25 @@ export function SampleForm({
               step="0.01"
               value={qtyG}
               onChange={(e) => setQtyG(e.target.value)}
-              invalid={Boolean(errors.receivedQtyG)}
+              invalid={Boolean(errors.receivedQtyG) || quantityComparison.kind === "SHORT" ||
+                quantityComparison.kind === "OVER"}
             />
+            {/* What was asked for against what turned up, as it is typed. A difference is
+                shown, never blocked: the supplier shipped what they shipped, and refusing to
+                record it would leave the library ignorant of material already on the shelf. */}
+            {quantityComparison.kind !== "UNKNOWN" && (
+              <p
+                className={`text-caption mt-1 ${
+                  quantityComparison.kind === "MATCH" ? "text-on-success" : "text-danger"
+                }`}
+              >
+                {quantityComparison.kind === "MATCH"
+                  ? `Matches the ${requestedQuantityG} g requested.`
+                  : `${quantityComparison.differenceG} g ${
+                      quantityComparison.kind === "SHORT" ? "short of" : "more than"
+                    } the ${requestedQuantityG} g requested.`}
+              </p>
+            )}
           </FormField>
 
           <FormField
