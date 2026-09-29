@@ -338,7 +338,27 @@ async function main() {
     check("which it passes in to compare against",
       /requestedQuantityG=\{order\.requiredQuantityG\}/.test(page), true);
 
+    // The form is shared by three screens and hid the piece-weight block whenever initial
+    // values were supplied — which reception does, to prefill from the request. That made a
+    // reception an edit: no Auto/Manual entry, and pieceMode never posted, so it could not
+    // be saved at all. Which screen it is must be stated, never inferred from the prefill.
     const formSrc = readFileSync("src/app/(app)/library/sample-form.tsx", "utf8");
+    check("create vs edit is explicit", /const isEdit = mode === "EDIT";/.test(formSrc), true);
+    check("not inferred from the prefill",
+      /const isEdit = Boolean\(initial\)/.test(formSrc), false);
+    check("and piece entry belongs to every creation",
+      /\{!isEdit && \([\s\S]{0,80}<PieceWeights/.test(formSrc), true);
+    for (const [screen, file, mode, action] of [
+      ["add", "src/app/(app)/library/add/page.tsx", "CREATE", "createSample"],
+      ["receive", "src/app/(app)/orders/[id]/receive/page.tsx", "CREATE", "receiveOrder"],
+      ["edit", "src/app/(app)/library/[id]/edit/page.tsx", "EDIT", "updateSample"],
+    ] as const) {
+      const src = readFileSync(file, "utf8");
+      check(`${screen} says which it is`, new RegExp(`mode="${mode}"`).test(src), true);
+      check(`${screen} pairs it with the matching action`,
+        new RegExp(`mode="${mode}"[^]{0,120}action=\{${action}\}`).test(src), true);
+    }
+
     check("the form compares as it is typed",
       /compareQuantities\(requestedQuantityG, qtyG\)/.test(formSrc), true);
     check("and shows a difference in red",

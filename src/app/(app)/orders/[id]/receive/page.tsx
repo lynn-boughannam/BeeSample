@@ -103,6 +103,8 @@ export default async function ReceiveOrderPage({
         </section>
       ) : (
         <SampleForm
+          // A reception creates a sample; the prefill below is not an edit.
+          mode="CREATE"
           action={receiveOrder}
           ingredients={ingredients}
           shelfDefaults={shelfDefaults}

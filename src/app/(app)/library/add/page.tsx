@@ -48,6 +48,7 @@ export default async function AddSamplePage() {
       </div>
 
       <SampleForm
+        mode="CREATE"
         action={createSample}
         ingredients={ingredients}
         shelfDefaults={shelfDefaults}

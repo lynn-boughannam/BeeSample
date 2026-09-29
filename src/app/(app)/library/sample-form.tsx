@@ -98,8 +98,12 @@ export type SampleFormInitial = {
   ingredientIds: string[];
 };
 
-// Shared by Add and Edit so the two can't drift. The only differences are the initial
-// values, the submit label, and the quantity helper text.
+// Shared by Add, Edit and Reception so they can't drift.
+//
+// `mode` says which, and is explicit rather than inferred from whether initial values were
+// supplied. Reception supplies them too — it prefills from the request — and inferring from
+// that made it an edit: the piece-weight block disappeared and pieceMode was never posted,
+// so a reception could not be saved at all.
 export function SampleForm({
   action,
   ingredients,
@@ -110,6 +114,7 @@ export function SampleForm({
   physicalForms,
   suppliers,
   projects,
+  mode,
   initial,
   requestedQuantityG,
   orderId,
@@ -125,6 +130,9 @@ export function SampleForm({
   physicalForms: string[];
   suppliers: string[];
   projects: string[];
+  // CREATE builds a new sample — typed in directly, or received against a request. EDIT
+  // changes one that already exists, and leaves its saved pieces alone.
+  mode: "CREATE" | "EDIT";
   initial?: SampleFormInitial;
   // Set only when the sample is being created by receiving an order: what was asked for, so
   // the received quantity can be checked against it as it is typed. Absent for direct entry,
@@ -203,7 +211,7 @@ export function SampleForm({
   // Orientation for a fragrance, the Category otherwise — the same key the swatch uses.
   const zoneLabel = colorKeyFor(source, category, orientation);
   const errors = state?.fieldErrors ?? {};
-  const isEdit = Boolean(initial);
+  const isEdit = mode === "EDIT";
 
   // Sublevel stays None unless the cell already holds another sample, in which case a
   // letter is taken so the two don't share an address. Worked out here so the Admin sees
@@ -337,7 +345,7 @@ export function SampleForm({
 
   return (
     <form action={formAction} className="space-y-6">
-      {initial?.id && <input type="hidden" name="id" value={initial.id} />}
+      {isEdit && initial && <input type="hidden" name="id" value={initial.id} />}
       {/* Set only when receiving an order: the action needs to know which request the
           sample it creates is closing. */}
       {orderId && <input type="hidden" name="orderId" value={orderId} />}
@@ -607,8 +615,10 @@ export function SampleForm({
         </p>
       </section>
 
-      {/* Piece tracking is part of sample creation (SLT-13). Editing an existing sample
-          leaves its saved pieces alone, so the block isn't shown there. */}
+      {/* Piece tracking is part of sample creation (SLT-13) — every one of them, including a
+          sample created by receiving a delivery, which needs its pieces splitting exactly as
+          a directly-entered one does. Editing an existing sample leaves its saved pieces
+          alone, so the block isn't shown there. */}
       {!isEdit && (
         <PieceWeights
           ready={piecesReady}

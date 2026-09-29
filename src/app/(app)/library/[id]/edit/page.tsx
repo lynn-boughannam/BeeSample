@@ -60,6 +60,7 @@ export default async function EditSamplePage({
       </div>
 
       <SampleForm
+        mode="EDIT"
         action={updateSample}
         ingredients={ingredients}
         shelfDefaults={shelfDefaults}
