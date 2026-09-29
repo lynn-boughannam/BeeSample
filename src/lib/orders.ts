@@ -122,11 +122,20 @@ export function orderLabel(order: {
 // ---------------------------------------------------------------------------
 
 
-// Rejection ends a request. Nothing further may be done to one — not approving it, not
-// editing it, not rejecting it again. Kept as a predicate rather than a scattered
-// `status === "REJECTED"` so every guard agrees about what terminal means.
+// Rejection and cancellation both end a request. Nothing further may be done to one — not
+// approving it, not editing it, not ending it again. Kept as a predicate rather than a
+// scattered `status === "REJECTED"` so every guard agrees about what terminal means.
 export function isTerminal(status: OrderStatus): boolean {
-  return status === "REJECTED";
+  return status === "REJECTED" || status === "CANCELLED";
+}
+
+// What to say when a guard turns someone away from a request that has already ended. The
+// two endings read differently on purpose: one is a decision someone made about the
+// request, the other is the requester withdrawing it.
+export function terminalReason(status: OrderStatus): string {
+  return status === "CANCELLED"
+    ? "This request was cancelled by whoever raised it."
+    : "This request was rejected.";
 }
 
 // Admin review acts on a request that is still waiting for it, and only then. An order
@@ -731,6 +740,96 @@ export function normalisePrNumber(raw: string): string | null {
 export function orderStatusAfterPrIssued(): OrderStatus {
   return "PR_ISSUED_AWAITING_RECEIPT";
 }
+
+// ---------------------------------------------------------------------------
+// Cancelling a request
+// ---------------------------------------------------------------------------
+
+/**
+ * Cancelling belongs to whoever raised the request, and to nobody else.
+ *
+ * Same rule as choosing a supplier and approving the costing, for the same reason: whether
+ * the material is still needed is the requester's to say. An Admin who decides a request
+ * shouldn't go ahead rejects it, which is a different act with their name on it.
+ */
+export const canCancelOrder = canSelectSupplier;
+
+/**
+ * Whether a request can still be withdrawn, and if not, why.
+ *
+ * "Any time" means exactly that, up to the point where there is something physical to
+ * account for: once the material has been received it is on a shelf, with pieces and a
+ * location, and cancelling would leave the library holding stock from a request that claims
+ * it was never wanted. Everything earlier can go, including after a PR has been raised —
+ * that PR then has to be cancelled in the purchasing system, which is why the reason is
+ * required rather than optional.
+ */
+export function checkCancelReady(order: {
+  status: string;
+}): { ok: true } | { ok: false; reason: string } {
+  const status = order.status as OrderStatus;
+  if (isTerminal(status)) {
+    return {
+      ok: false,
+      reason:
+        status === "CANCELLED"
+          ? "This request has already been cancelled."
+          : "This request was already rejected.",
+    };
+  }
+  if (status === "RECEIVED") {
+    return {
+      ok: false,
+      reason:
+        "The material has already been received into the library. Discard the sample instead if it isn't wanted.",
+    };
+  }
+  return { ok: true };
+}
+
+/** What a request becomes when its requester withdraws it. */
+export function orderStatusAfterCancellation(): OrderStatus {
+  return "CANCELLED";
+}
+
+/**
+ * Who has to be told that a request was withdrawn.
+ *
+ * Anyone who put their name to it, plus the Admins who coordinate procurement — a request
+ * that vanished silently would leave Samer chasing a supplier for documents nobody needs
+ * and CSS reviewing paperwork for a material nobody is buying.
+ *
+ * Only APPROVALS count, not decisions in general: someone who rejected a supplier option
+ * already said no to it, and telling them the whole request is off adds nothing. The
+ * canceller is dropped — they know.
+ */
+export function cancellationRecipients(
+  order: {
+    orderedById: string;
+    approvedById?: string | null;
+    suppliers?: Array<{ cssDecision: string; cssDecidedById?: string | null }>;
+  },
+  adminIds: string[]
+): string[] {
+  const ids = new Set<string>(adminIds);
+  if (order.approvedById) ids.add(order.approvedById);
+  for (const supplier of order.suppliers ?? []) {
+    if (supplier.cssDecision === "APPROVED" && supplier.cssDecidedById) {
+      ids.add(supplier.cssDecidedById);
+    }
+  }
+  ids.delete(order.orderedById);
+  return [...ids];
+}
+
+/**
+ * How long a cancellation stays on someone's list after it happens.
+ *
+ * The bell and the banners in this app are derived from current data rather than stored per
+ * person, so there is nothing that records who has read what. A window is the honest way to
+ * do that: recent cancellations are shown, and they age out.
+ */
+export const CANCELLATION_NOTICE_DAYS = 14;
 
 // ---------------------------------------------------------------------------
 // Phase 9 — reception, and the sample it produces

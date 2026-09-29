@@ -14,7 +14,9 @@ import {
   canEditOrder,
   isAwaitingAdminReview,
   canApproveCosting,
+  canCancelOrder,
   canIssuePr,
+  checkCancelReady,
   canReceiveOrder,
   checkCostingApprovalReady,
   checkPrReady,
@@ -41,6 +43,8 @@ import { CostingApprovalPanel } from "./costing-approval-panel";
 import { approveCosting } from "./costing-approval-actions";
 import { PrPanel } from "./pr-panel";
 import { issuePurchaseRequisition } from "./pr-actions";
+import { CancelPanel } from "./cancel-panel";
+import { cancelOrder } from "./cancel-actions";
 import {
   SupplierEntryForm,
   type SupplierDocument,
@@ -70,6 +74,7 @@ import {
 const STATUS_VARIANT: Record<OrderStatus, "info" | "success" | "danger" | "warning" | "neutral"> = {
   SUBMITTED: "info",
   REJECTED: "danger",
+  CANCELLED: "neutral",
   APPROVED_PENDING_SUPPLY_CHAIN: "warning",
   DETAILS_SUBMITTED_AWAITING_CSS: "info",
   SUPPLIER_SELECTED: "info",
@@ -169,6 +174,9 @@ export default async function OrderDetailPage({
   // Phase 9 — reception is a page of its own rather than a panel: it creates a whole
   // sample, with pieces and a shelf slot, and that does not fit beside a status track.
   const mayReceive = canReceiveOrder(role) && checkReceiptReady(order).ok;
+  // Withdrawing is the requester's, at any point up to the material arriving.
+  const mayCancel =
+    canCancelOrder(order, { id: session.user.id }) && checkCancelReady(order).ok;
   // What the PR has to be raised for, summed once here rather than in the panel — the
   // figures are already on the row above, and two places computing a total is one too many.
   const costingTotal =
@@ -556,6 +564,15 @@ export default async function OrderDetailPage({
           </p>
         )}
       </section>
+
+      {mayCancel && (
+        <CancelPanel
+          orderId={order.id}
+          statusLabel={ORDER_STATUS_LABELS[status] ?? order.status}
+          prNumber={order.prNumber}
+          action={cancelOrder}
+        />
+      )}
 
       <section className="rounded-lg border border-neutral-dark/10 bg-white p-5 shadow-elevated">
         <h2 className="text-section-header mb-4 text-neutral-dark">Purchasing &amp; receipt</h2>

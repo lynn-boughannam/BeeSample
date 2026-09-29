@@ -15,7 +15,7 @@ import { parseMssqlUrl } from "./src/lib/mssql-url";
  * Run with --apply; without it, this only reports.
  */
 const PREFIXES = [
-  "ZZ-CODATE-", "ZZ-DASH-VERIFY-", "ZZ-DISCARD-VERIFY-", "ZZ-DOC-", "ZZ-FLAGS-",
+  "ZZ-CANCEL-", "ZZ-CODATE-", "ZZ-DASH-VERIFY-", "ZZ-DISCARD-VERIFY-", "ZZ-DOC-", "ZZ-FLAGS-",
   "ZZ-HISTORY-VERIFY-", "ZZ-INC-", "ZZ-MYCO-VERIFY-", "ZZ-ORD-", "ZZ-P1-", "ZZ-P2-",
   "ZZ-P3-", "ZZ-P4-", "ZZ-P5-", "ZZ-P6-", "ZZ-P7-", "ZZ-P8-", "ZZ-P9-", "ZZ-RACK-VERIFY-", "ZZ-RESTOCK-VERIFY-",
   "ZZ-SLT19-VERIFY-", "ZZ-STOCK-VERIFY-", "ZZ-STUB-", "ZZ-SUP-",

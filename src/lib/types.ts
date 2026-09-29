@@ -22,6 +22,10 @@ export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 export const ORDER_STATUSES = [
   "SUBMITTED",
   "REJECTED",
+  // Withdrawn by whoever raised it, which is not the same as being turned down. Both end a
+  // request, but "we decided against this" and "we no longer need it" are different facts,
+  // and a report that couldn't tell them apart would blame the reviewer for both.
+  "CANCELLED",
   "APPROVED_PENDING_SUPPLY_CHAIN",
   // Every option is with CSS and Supply Chain has nothing left to enter. Reached only when
   // ALL of them have been submitted: one supplier under review while another still needs a
@@ -50,6 +54,7 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   SUBMITTED: "Submitted",
   REJECTED: "Rejected",
+  CANCELLED: "Cancelled by requester",
   APPROVED_PENDING_SUPPLY_CHAIN: "Approved — awaiting documents & details from Supply Chain",
   DETAILS_SUBMITTED_AWAITING_CSS: "Details submitted — awaiting CSS approval on documents",
   CSS_APPROVED_PENDING_FORMULATOR: "CSS approved — awaiting Submitter/Formulator",
@@ -60,9 +65,10 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   RECEIVED: "Received",
 };
 
-// Rejection is a dead end rather than a step, so progress is measured along the rest.
+// Rejection and cancellation are dead ends rather than steps, so progress is measured along
+// the rest.
 export const ORDER_STATUS_SEQUENCE: readonly OrderStatus[] = ORDER_STATUSES.filter(
-  (s) => s !== "REJECTED"
+  (s) => s !== "REJECTED" && s !== "CANCELLED"
 );
 
 // Per-supplier CSS review outcome. Separate from the order status because three suppliers

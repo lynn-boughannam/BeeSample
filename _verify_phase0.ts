@@ -11,7 +11,13 @@ import {
   SUPPLIER_DOCUMENT_SLA_DAYS,
   CSS_REVIEW_SLA_DAYS,
 } from "./src/lib/working-days";
-import { ROLES, ORDER_STATUSES, ORDER_STATUS_LABELS, CSS_DECISIONS } from "./src/lib/types";
+import {
+  ROLES,
+  ORDER_STATUSES,
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_SEQUENCE,
+  CSS_DECISIONS,
+} from "./src/lib/types";
 
 // Phase 0 foundations: roles, schema, and the working-day maths every later SLA rests on.
 
@@ -122,13 +128,20 @@ async function main() {
     testUsers.every((u) => u.isActive), true);
 
   console.log("\n=== order status sequence ===");
-  check("ten statuses", ORDER_STATUSES.length, 10);
+  check("eleven statuses", ORDER_STATUSES.length, 11);
+  check("nine of them are steps", ORDER_STATUS_SEQUENCE.length, 9);
+  // Rejected and cancelled are the two ways a request ends without finishing.
+  check("and two are endings",
+    ORDER_STATUSES.filter((s) => !ORDER_STATUS_SEQUENCE.includes(s)).join(","),
+    "REJECTED,CANCELLED");
   check("starts at Submitted", ORDER_STATUSES[0], "SUBMITTED");
   check("ends at Received", ORDER_STATUSES[ORDER_STATUSES.length - 1], "RECEIVED");
   // The order they are declared in is the order the workflow runs in, which the progress
   // bar reads positionally — so the CSS wait has to sit between the two steps it separates.
+  // Read from the sequence itself, so the two endings can't quietly creep onto the track
+  // the progress bar walks.
   check("the whole chain, in workflow order",
-    ORDER_STATUSES.filter((s) => s !== "REJECTED").join(","),
+    ORDER_STATUS_SEQUENCE.join(","),
     "SUBMITTED,APPROVED_PENDING_SUPPLY_CHAIN,DETAILS_SUBMITTED_AWAITING_CSS," +
       "CSS_APPROVED_PENDING_FORMULATOR,SUPPLIER_SELECTED,COSTING_SUBMITTED_PENDING_FORMULATOR," +
       "FORMULATOR_APPROVED_PENDING_PR,PR_ISSUED_AWAITING_RECEIPT,RECEIVED");

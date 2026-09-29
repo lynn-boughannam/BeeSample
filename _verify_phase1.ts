@@ -55,8 +55,10 @@ async function main() {
   check("a submitted request is awaiting review", isAwaitingAdminReview("SUBMITTED"), true);
   check("an approved one is not", isAwaitingAdminReview("APPROVED_PENDING_SUPPLY_CHAIN"), false);
   check("rejection is terminal", isTerminal("REJECTED"), true);
-  check("nothing else is terminal",
-    ORDER_STATUSES.filter((s) => isTerminal(s)).join(","), "REJECTED");
+  // Cancellation ends a request too — the requester withdrawing it rather than a reviewer
+  // turning it down, but equally final. No live status may be terminal.
+  check("so is cancellation, and nothing else",
+    ORDER_STATUSES.filter((s) => isTerminal(s)).join(","), "REJECTED,CANCELLED");
   check("editing is allowed while awaiting review", canEditOrder("SUBMITTED"), true);
   check("editing stops once approved", canEditOrder("APPROVED_PENDING_SUPPLY_CHAIN"), false);
   check("editing is impossible after rejection", canEditOrder("REJECTED"), false);

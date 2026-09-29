@@ -23,6 +23,7 @@ import {
   orderWaitingOn,
   type OrderRequestType,
 } from "@/lib/orders";
+import { cancellationsFor } from "@/lib/order-cancellations";
 import { OrderFilters } from "./order-filters";
 
 // Submitted requests. The receiving/review step is a separate story, so nothing here acts
@@ -35,6 +36,7 @@ import { OrderFilters } from "./order-filters";
 const STATUS_VARIANT: Record<OrderStatus, "info" | "success" | "danger" | "warning" | "neutral"> = {
   SUBMITTED: "info",
   REJECTED: "danger",
+  CANCELLED: "neutral",
   APPROVED_PENDING_SUPPLY_CHAIN: "warning",
   DETAILS_SUBMITTED_AWAITING_CSS: "info",
   SUPPLIER_SELECTED: "info",
@@ -121,6 +123,10 @@ export default async function OrdersPage({
     // The unfiltered count, so the filter row can say how much is being hidden.
     prisma.sampleOrder.count({ where: worksOrders ? {} : { orderedById: session.user.id } }),
   ]);
+
+  // A request the viewer approved, or any request at all if they coordinate procurement,
+  // that its requester has since withdrawn. Nothing else would tell them.
+  const cancellations = await cancellationsFor(session.user.id, role);
 
   // Phases 1 and 8 — the two queues that are the Admin's. Only they act on either, so only
   // they are told about them.
@@ -213,6 +219,30 @@ export default async function OrdersPage({
             — the costing has been approved{awaitingPr === 1 ? "" : " on each"}
           </span>
         </Link>
+      )}
+
+      {cancellations.length > 0 && (
+        <section className="rounded-lg border border-neutral-dark/20 bg-neutral-dark/[0.03] px-4 py-3">
+          <h2 className="text-body font-semibold text-neutral-dark">
+            {cancellations.length} request{cancellations.length === 1 ? " was" : "s were"}{" "}
+            cancelled
+          </h2>
+          <ul className="mt-1.5 space-y-1">
+            {cancellations.map((c) => (
+              <li key={c.orderId} className="text-caption text-neutral-dark/70">
+                <Link
+                  href={`/orders/${c.orderId}`}
+                  className="font-medium text-neutral-dark underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
+                >
+                  {c.label}
+                </Link>{" "}
+                — withdrawn by {c.cancelledBy} on {day(c.cancelledAt)}
+                {c.because === "APPROVED" ? ", after you approved it" : ""}
+                {c.reason ? `. “${c.reason}”` : "."}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {needsMyChoice.length > 0 && (
