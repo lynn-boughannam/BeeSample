@@ -43,29 +43,6 @@ async function FormulatorDashboard({ userId }: { userId: string }) {
     <div className="space-y-8">
       <h1 className="text-page-title text-neutral-dark">Dashboard</h1>
 
-      {needsMyChoice.length > 0 && (
-        <section className="rounded-lg border border-brand-secondary/30 bg-brand-primary/[0.08] p-4">
-          <h2 className="text-section-header text-neutral-dark">
-            {needsMyChoice.length} request{needsMyChoice.length === 1 ? "" : "s"} waiting on you
-          </h2>
-          <p className="text-caption mt-0.5 mb-3 text-neutral-dark/70">
-            Their supplier documents have been reviewed. Choose a supplier, or decline.
-          </p>
-          <ul className="space-y-1.5">
-            {needsMyChoice.map((o) => (
-              <li key={o.id}>
-                <Link
-                  href={`/orders/${o.id}`}
-                  className="text-body font-medium text-neutral-dark underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
-                >
-                  {orderLabel(o)}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard label="Currently With You" value={myPieces.length} />
         <StatCard label="My Requests" value={myRequests.length} />

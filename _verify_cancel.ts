@@ -227,6 +227,31 @@ async function main() {
     check("and reaches nobody who wasn't working it",
       bellForBystander.some((n) => n.title.includes(PREFIX)), false);
 
+    // An Admin's own queues belong in the bell too, or the sidebar dot would be dark while
+    // a newly raised request sat unreviewed.
+    console.log("\n--- the Admin's queues reach the bell as well ---");
+    const queueOrder = await prisma.sampleOrder.create({
+      data: {
+        requestType: "NEW",
+        inciName: PREFIX + "UNREVIEWED",
+        requiredQuantityG: "100",
+        supplier1: "A",
+        directorApprovalConfirmed: true,
+        orderedById: submitter.id,
+        status: "SUBMITTED",
+      },
+    });
+    const adminBell = await loadOverdueNotifications(approver.id, "ADMIN");
+    const queueRow = adminBell.find((n) => n.title.includes(PREFIX + "UNREVIEWED"));
+    check("a newly raised request is waiting on the Admin", Boolean(queueRow), true);
+    check("and says what to do with it", queueRow?.detail, "Newly raised — review it");
+    check("filed as theirs to clear", queueRow?.kind, "DECISION");
+    // It is not the Formulator's to review, whoever raised it.
+    const submitterBell = await loadOverdueNotifications(submitter.id, "FORMULATOR");
+    check("but not on the requester's own list",
+      submitterBell.some((n) => n.title.includes(PREFIX + "UNREVIEWED")), false);
+    await prisma.sampleOrder.delete({ where: { id: queueOrder.id } });
+
     console.log("\n--- it ages out rather than sitting there forever ---");
     await prisma.sampleOrder.update({
       where: { id: built.id },
@@ -285,6 +310,26 @@ async function main() {
       /CANCELLED", label: "Cancelled requests", tone: "INFO"/.test(bellSrc), true);
     check("decisions read as action, not lateness",
       /DECISION", label: "Waiting on you", tone: "ACTION"/.test(bellSrc), true);
+
+    // The dot on the sidebar entry, so a section that needs someone says so before they
+    // open it. The count is set in the layout off the notifications the bell already
+    // loaded — a second query would be a second answer to the same question — and carried
+    // on the nav item, which is what these two check.
+    const navType = readFileSync("src/lib/nav.ts", "utf8");
+    check("a nav entry can carry a count", /badge\?: number/.test(navType), true);
+    const nav = readFileSync("src/components/app-nav.tsx", "utf8");
+    check("the nav renders it", /item\.badge/.test(nav), true);
+    // A red dot alone says nothing to a screen reader, or to anyone who can't tell it from
+    // the grey around it.
+    check("and says what it means in words",
+      /waiting on you`/.test(nav), true);
+
+    // Both dashboards said the same thing the bell says. Neither does now.
+    const adminDash = readFileSync("src/app/(app)/dashboard/admin-dashboard.tsx", "utf8");
+    const roleDash = readFileSync("src/app/(app)/dashboard/page.tsx", "utf8");
+    check("the admin dashboard doesn't repeat it",
+      /waiting on you<\/h2>|awaitingMyChoice\.map/.test(adminDash), false);
+    check("nor the formulator's", /needsMyChoice\.map/.test(roleDash), false);
 
     const dash = readFileSync("src/lib/dashboard.ts", "utf8");
     const notif = readFileSync("src/lib/notifications.ts", "utf8");

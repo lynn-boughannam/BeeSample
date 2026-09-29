@@ -7,6 +7,10 @@ export type NavItem = {
   roles: Role[];
   // Dashboard and Menu Settings are never hideable via Menu Settings.
   pinned?: boolean;
+  // How many things behind this entry are waiting on the person looking. Set per request
+  // in the layout and rendered as a dot, so a section that needs them says so from the
+  // sidebar rather than only once they have opened it.
+  badge?: number;
   // Items tagged "settings" are folded under the System Settings disclosure in the sidebar
   // instead of sitting in the main list.
   group?: "settings";

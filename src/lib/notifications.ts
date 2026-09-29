@@ -156,12 +156,25 @@ async function overdueCssReviews(role: Role, now: Date) {
   );
 }
 
-// Decisions that are this person's to make: choosing a supplier, then approving what it
-// costs. Not late — there is no clock on them — but they sit until someone acts, and the
-// bell is where someone looks to find out what is theirs.
-async function decisionsWaiting(userId: string) {
-  const waiting = await awaitingDecisionFor(userId);
-  return waiting.map<OverdueNotification>((item) => ({
+// What the Admin has to do next on a request, by the status it is sitting at. Not late —
+// none of these has a clock — but each one stops until they act.
+const ADMIN_ORDER_QUEUES: Array<{ status: string; detail: string }> = [
+  { status: "SUBMITTED", detail: "Newly raised — review it" },
+  { status: "FORMULATOR_APPROVED_PENDING_PR", detail: "Costing approved — raise the PR" },
+  { status: "PR_ISSUED_AWAITING_RECEIPT", detail: "Ordered — receive it when it arrives" },
+];
+
+/**
+ * Requests waiting on this person to do something.
+ *
+ * Two sources, one kind: the requester's own decisions (choosing a supplier, approving the
+ * costing) and, for an Admin, the three queues that are theirs. Both are "nobody else can
+ * clear this", which is what the bell is for — and keeping them one kind is what lets the
+ * sidebar dot count them without asking the database a second question.
+ */
+async function ordersNeedingYou(userId: string, role: Role) {
+  const mine = await awaitingDecisionFor(userId);
+  const rows = mine.map<OverdueNotification>((item) => ({
     id: `decision-${item.orderId}`,
     kind: "DECISION",
     title: item.label,
@@ -174,6 +187,37 @@ async function decisionsWaiting(userId: string) {
     // Above the SLA rows: this is the one kind nobody else can clear.
     daysLate: Number.MAX_SAFE_INTEGER,
   }));
+
+  if (role !== "ADMIN") return rows;
+
+  const queued = await prisma.sampleOrder.findMany({
+    where: { status: { in: ADMIN_ORDER_QUEUES.map((q) => q.status) } },
+    select: {
+      id: true,
+      status: true,
+      inciName: true,
+      existingSample: { select: { sampleCode: true, rmName: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  for (const order of queued) {
+    // A request the Admin raised themselves can be in both lists — theirs to decide and
+    // theirs to administer. One row, since it is one request and one place to go.
+    if (rows.some((r) => r.href === `/orders/${order.id}`)) continue;
+    const queue = ADMIN_ORDER_QUEUES.find((q) => q.status === order.status)!;
+    rows.push({
+      id: `queue-${order.id}`,
+      kind: "DECISION",
+      title: orderLabel(order),
+      detail: queue.detail,
+      overdueBy: "waiting on you",
+      href: `/orders/${order.id}`,
+      daysLate: Number.MAX_SAFE_INTEGER,
+    });
+  }
+
+  return rows;
 }
 
 // Requests withdrawn by whoever raised them, shown to the people who were working them —
@@ -206,7 +250,7 @@ export async function loadOverdueNotifications(
   now: Date = new Date()
 ): Promise<OverdueNotification[]> {
   const groups = await Promise.all([
-    decisionsWaiting(userId),
+    ordersNeedingYou(userId, role),
     overdueCheckouts(userId, role, now),
     overdueDocuments(role, now),
     overdueCssReviews(role, now),

@@ -26,8 +26,22 @@ function NavLink({
       href={item.href}
       // Collapsed, the icon is the only cue, so the label has to reach both the
       // pointer (title) and the screen reader (aria-label).
-      title={collapsed ? item.label : undefined}
-      aria-label={collapsed ? item.label : undefined}
+      // The dot is decorative, so what it means is said here instead — a colour alone
+      // reaches neither a screen reader nor anyone who can't tell red from grey.
+      title={
+        item.badge
+          ? `${item.label} — ${item.badge} waiting on you`
+          : collapsed
+            ? item.label
+            : undefined
+      }
+      aria-label={
+        item.badge
+          ? `${item.label}, ${item.badge} waiting on you`
+          : collapsed
+            ? item.label
+            : undefined
+      }
       className={cn(
         ROW,
         collapsed ? "justify-center p-2.5" : "gap-3 px-3 py-2",
@@ -35,8 +49,23 @@ function NavLink({
         isActive ? "bg-brand-primary text-on-primary" : IDLE
       )}
     >
-      <NavIcon navKey={item.key} className={cn("shrink-0", nested ? "h-4 w-4" : "h-5 w-5")} />
+      <span className="relative shrink-0">
+        <NavIcon navKey={item.key} className={cn(nested ? "h-4 w-4" : "h-5 w-5")} />
+        {/* Collapsed, the icon is all there is, so the dot rides on it. */}
+        {collapsed && item.badge ? (
+          <span
+            aria-hidden="true"
+            className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-danger ring-2 ring-neutral-dark"
+          />
+        ) : null}
+      </span>
       {!collapsed && <span className="truncate">{item.label}</span>}
+      {!collapsed && item.badge ? (
+        <span
+          aria-hidden="true"
+          className="ml-auto h-2 w-2 shrink-0 rounded-full bg-danger"
+        />
+      ) : null}
     </Link>
   );
 }
