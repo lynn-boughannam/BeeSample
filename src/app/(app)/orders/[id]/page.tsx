@@ -13,8 +13,11 @@ import {
   ORDER_REQUEST_TYPE_LABELS,
   canEditOrder,
   isAwaitingAdminReview,
+  canApproveCosting,
+  checkCostingApprovalReady,
   isAwaitingCosting,
   isAwaitingSupplyChain,
+  isInSupplierWorkup,
   needsDocumentRequest,
   orderWaitingOn,
   canSelectSupplier,
@@ -30,6 +33,8 @@ import { ReviewPanel } from "./review-panel";
 import { approveOrder, rejectOrder } from "./review-actions";
 import { SelectionPanel, type SelectableSupplier } from "./selection-panel";
 import { declineAllSuppliers, selectSupplier } from "./selection-actions";
+import { CostingApprovalPanel } from "./costing-approval-panel";
+import { approveCosting } from "./costing-approval-actions";
 import {
   SupplierEntryForm,
   type SupplierDocument,
@@ -64,6 +69,7 @@ const STATUS_VARIANT: Record<OrderStatus, "info" | "success" | "danger" | "warni
   SUPPLIER_SELECTED: "info",
   CSS_APPROVED_PENDING_FORMULATOR: "warning",
   COSTING_SUBMITTED_PENDING_FORMULATOR: "warning",
+  FORMULATOR_APPROVED_PENDING_PR: "info",
   PR_ISSUED_AWAITING_RECEIPT: "info",
   RECEIVED: "success",
 };
@@ -146,6 +152,11 @@ export default async function OrderDetailPage({
   // And only once CSS has finished with every option: picking while one is still under
   // review would mean picking without knowing what it would have offered.
   const mayChoose = canSelectSupplier(order, { id: session.user.id });
+  // Phase 7 — the same person signs for the costing as chose the supplier.
+  const chosenSupplier = order.suppliers.find((s) => s.isSelected) ?? null;
+  const costingApproval = checkCostingApprovalReady(order, order.suppliers);
+  const mayApproveCosting =
+    canApproveCosting(order, { id: session.user.id }) && costingApproval.ok;
   const selectionReady = checkSelectionReady(order, order.suppliers);
   const approvedOptions: SelectableSupplier[] = selectableSuppliers(order.suppliers).map((s) => ({
     id: s.id,
@@ -212,11 +223,24 @@ export default async function OrderDetailPage({
           declineAction={declineAllSuppliers}
         />
       )}
-      {mayChoose && !selectionReady.ok && status === "APPROVED_PENDING_SUPPLY_CHAIN" && (
+      {mayChoose && !selectionReady.ok && isInSupplierWorkup(status) && (
         <section className="rounded-lg border border-neutral-dark/15 bg-neutral-dark/[0.02] p-4">
           <h2 className="text-section-header text-neutral-dark">Choose a supplier</h2>
           <p className="text-body mt-1 text-neutral-dark/70">{selectionReady.reason}</p>
         </section>
+      )}
+
+      {/* Phase 7 — approving what it will cost. The panel needs the chosen row for its
+          figures; the gate above has already established it has one. */}
+      {mayApproveCosting && chosenSupplier && (
+        <CostingApprovalPanel
+          orderId={order.id}
+          supplierName={chosenSupplier.supplierName}
+          cost={chosenSupplier.cost?.toString() ?? ""}
+          shippingCost={chosenSupplier.shippingCost?.toString() ?? ""}
+          requiredQuantityG={order.requiredQuantityG?.toString() ?? null}
+          action={approveCosting}
+        />
       )}
 
       {/* Where the request has reached. Rejected isn't on the track — it ends it. */}

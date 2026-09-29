@@ -40,6 +40,7 @@ const STATUS_VARIANT: Record<OrderStatus, "info" | "success" | "danger" | "warni
   SUPPLIER_SELECTED: "info",
   CSS_APPROVED_PENDING_FORMULATOR: "warning",
   COSTING_SUBMITTED_PENDING_FORMULATOR: "warning",
+  FORMULATOR_APPROVED_PENDING_PR: "info",
   PR_ISSUED_AWAITING_RECEIPT: "info",
   RECEIVED: "success",
 };

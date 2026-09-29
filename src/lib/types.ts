@@ -38,6 +38,10 @@ export const ORDER_STATUSES = [
   // the Formulator's choice belonged; the phase 0 brief had the order right all along
   // (corrected 2026-09-29).
   "COSTING_SUBMITTED_PENDING_FORMULATOR",
+  // Back, and this time something writes it. Removed on 2026-09-28 as a second name for
+  // SUPPLIER_SELECTED, which it was while costing sat before selection — with costing after,
+  // approving it is a distinct act by a different person and needs its own state.
+  "FORMULATOR_APPROVED_PENDING_PR",
   "PR_ISSUED_AWAITING_RECEIPT",
   "RECEIVED",
 ] as const;
@@ -51,6 +55,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   CSS_APPROVED_PENDING_FORMULATOR: "CSS approved — awaiting Submitter/Formulator",
   SUPPLIER_SELECTED: "Supplier chosen — pending Supply Chain details",
   COSTING_SUBMITTED_PENDING_FORMULATOR: "Costing submitted — pending Formulator approval",
+  FORMULATOR_APPROVED_PENDING_PR: "Formulator approved — pending PR",
   PR_ISSUED_AWAITING_RECEIPT: "PR issued — awaiting receipt",
   RECEIVED: "Received",
 };

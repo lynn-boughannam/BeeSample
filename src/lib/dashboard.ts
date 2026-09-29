@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { loadSampleStock } from "@/lib/stock-queries";
 import { loadCategoryColors } from "@/lib/shelf";
 import { stockLevel, EMPTY_STOCK, type StockLevel, type SampleStock } from "@/lib/stock";
-import { checkSelectionReady, orderLabel } from "@/lib/orders";
+import { checkCostingApprovalReady, checkSelectionReady, orderLabel } from "@/lib/orders";
 
 // Everything the Admin dashboard shows, assembled in one place so the page stays a
 // rendering concern and the numbers can be verified without a browser (SLT-59).
@@ -24,7 +24,10 @@ export type CategoryBar = { category: string; count: number; colorHex: string };
 // A request this Admin raised themselves, whose options CSS has finished with. Admins raise
 // requests here as often as Formulators do, so the decision that is theirs as requester has
 // to reach them too — the review queue above it is a different job.
-export type AwaitingMyChoice = { id: string; label: string };
+// Both decisions the requester signs for: choosing the supplier, then approving what it
+// costs. One list, because to whoever raised the request they are the same thing — their
+// request is waiting on them — and two near-identical banners would just compete.
+export type AwaitingMyChoice = { id: string; label: string; needs: "SUPPLIER" | "COSTING" };
 
 export type CheckedOutPiece = {
   pieceId: string;
@@ -127,6 +130,7 @@ export async function loadAdminDashboard(
             "SUPPLIER_SELECTED",
             "CSS_APPROVED_PENDING_FORMULATOR",
             "COSTING_SUBMITTED_PENDING_FORMULATOR",
+            "FORMULATOR_APPROVED_PENDING_PR",
             "PR_ISSUED_AWAITING_RECEIPT",
           ],
         },
@@ -179,22 +183,34 @@ export async function loadAdminDashboard(
     a.formulatorName.localeCompare(b.formulatorName)
   );
 
-  // Requests this viewer raised that are waiting on them to choose a supplier. Narrowed to
-  // the status the choice opens at — checkSelectionReady below is still the authority, and
+  // Requests this viewer raised that are waiting on a decision of theirs. Narrowed to the
+  // two statuses those decisions open at — the checks below are still the authority, and
   // querying Supply Chain's status instead made this silently always empty once the CSS
   // decision started advancing the order.
   const myOrders = viewerId
     ? await prisma.sampleOrder.findMany({
-        where: { orderedById: viewerId, status: "CSS_APPROVED_PENDING_FORMULATOR" },
+        where: {
+          orderedById: viewerId,
+          status: { in: ["CSS_APPROVED_PENDING_FORMULATOR", "COSTING_SUBMITTED_PENDING_FORMULATOR"] },
+        },
         include: {
           existingSample: { select: { sampleCode: true, rmName: true } },
-          suppliers: { select: { cssDecision: true } },
+          suppliers: {
+            select: { cssDecision: true, isSelected: true, cost: true, shippingCost: true },
+          },
         },
       })
     : [];
-  const awaitingMyChoice: AwaitingMyChoice[] = myOrders
-    .filter((o) => checkSelectionReady(o, o.suppliers).ok)
-    .map((o) => ({ id: o.id, label: orderLabel(o) }));
+  const awaitingMyChoice: AwaitingMyChoice[] = myOrders.flatMap<AwaitingMyChoice>((o) => {
+    const label = orderLabel(o);
+    if (checkSelectionReady(o, o.suppliers).ok) {
+      return [{ id: o.id, label, needs: "SUPPLIER" }];
+    }
+    if (checkCostingApprovalReady(o, o.suppliers).ok) {
+      return [{ id: o.id, label, needs: "COSTING" }];
+    }
+    return [];
+  });
 
   return {
     awaitingMyChoice,

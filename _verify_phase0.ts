@@ -122,7 +122,7 @@ async function main() {
     testUsers.every((u) => u.isActive), true);
 
   console.log("\n=== order status sequence ===");
-  check("nine statuses", ORDER_STATUSES.length, 9);
+  check("ten statuses", ORDER_STATUSES.length, 10);
   check("starts at Submitted", ORDER_STATUSES[0], "SUBMITTED");
   check("ends at Received", ORDER_STATUSES[ORDER_STATUSES.length - 1], "RECEIVED");
   // The order they are declared in is the order the workflow runs in, which the progress
@@ -131,7 +131,12 @@ async function main() {
     ORDER_STATUSES.filter((s) => s !== "REJECTED").join(","),
     "SUBMITTED,APPROVED_PENDING_SUPPLY_CHAIN,DETAILS_SUBMITTED_AWAITING_CSS," +
       "CSS_APPROVED_PENDING_FORMULATOR,SUPPLIER_SELECTED,COSTING_SUBMITTED_PENDING_FORMULATOR," +
-      "PR_ISSUED_AWAITING_RECEIPT,RECEIVED");
+      "FORMULATOR_APPROVED_PENDING_PR,PR_ISSUED_AWAITING_RECEIPT,RECEIVED");
+  // Each of the submitter's two decisions is followed by the step it releases, so the pair
+  // cannot collapse into one another again.
+  check("approving the costing releases the PR",
+    ORDER_STATUSES.indexOf("PR_ISSUED_AWAITING_RECEIPT") -
+      ORDER_STATUSES.indexOf("FORMULATOR_APPROVED_PENDING_PR"), 1);
   // Costing is worked out for the supplier that was chosen, so it cannot come before the
   // choice. Having those two the wrong way round is what made the post-CSS wait borrow the
   // costing status and mean something it didn't.

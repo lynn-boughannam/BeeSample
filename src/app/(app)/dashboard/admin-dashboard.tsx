@@ -63,7 +63,7 @@ export async function AdminDashboard({ viewerId }: { viewerId: string }) {
             {awaitingMyChoice.length === 1 ? " is" : "s are"} waiting on you
           </h2>
           <p className="text-caption mt-0.5 mb-3 text-neutral-dark/70">
-            Their supplier documents have been reviewed. Choose a supplier, or decline.
+            Choose a supplier, or approve what one will cost.
           </p>
           <ul className="flex flex-wrap gap-x-4 gap-y-1">
             {awaitingMyChoice.map((o) => (
@@ -74,6 +74,11 @@ export async function AdminDashboard({ viewerId }: { viewerId: string }) {
                 >
                   {o.label}
                 </Link>
+                {/* Which of the two it needs, so the list can be worked without opening
+                    each one to find out. */}
+                <span className="text-caption ml-1.5 text-neutral-dark/55">
+                  {o.needs === "SUPPLIER" ? "choose a supplier" : "approve costing"}
+                </span>
               </li>
             ))}
           </ul>

@@ -611,6 +611,62 @@ export function orderStatusAfterCosting(): OrderStatus {
   return "COSTING_SUBMITTED_PENDING_FORMULATOR";
 }
 
+// ---------------------------------------------------------------------------
+// Phase 7 — the Formulator approves the costing
+// ---------------------------------------------------------------------------
+
+/** Whether the request is waiting on the Formulator to approve what it will cost. */
+export function isAwaitingCostingApproval(status: OrderStatus): boolean {
+  return status === "COSTING_SUBMITTED_PENDING_FORMULATOR";
+}
+
+/**
+ * Whether the costing may be approved, and if not, why.
+ *
+ * The figures have to actually be there. Costing is written and the status advanced in one
+ * transaction, so a request at this status without them means something went wrong — better
+ * said out loud than approved as if the numbers existed.
+ */
+export function checkCostingApprovalReady(
+  order: { status: string },
+  suppliers: Array<{ isSelected: boolean; cost: unknown; shippingCost: unknown }>
+): { ok: true } | { ok: false; reason: string } {
+  if (order.status === "REJECTED") {
+    return { ok: false, reason: "This request was rejected." };
+  }
+  if (!isAwaitingCostingApproval(order.status as OrderStatus)) {
+    return {
+      ok: false,
+      reason:
+        order.status === "SUPPLIER_SELECTED"
+          ? "Supply Chain hasn't submitted the costing yet."
+          : "This request isn't waiting on costing approval.",
+    };
+  }
+  const chosen = suppliers.find((s) => s.isSelected);
+  if (!chosen) {
+    return { ok: false, reason: "No supplier is marked as chosen on this request." };
+  }
+  if (chosen.cost == null || chosen.shippingCost == null) {
+    return { ok: false, reason: "The costing is incomplete — ask Supply Chain to re-enter it." };
+  }
+  return { ok: true };
+}
+
+/**
+ * Approving is the submitter's, exactly as choosing was.
+ *
+ * Same rule and the same reason: this is a judgement about whether the cost is worth paying
+ * for the work the material is for, and the person who raised the request holds it. An
+ * Admin signing here would put their name to a decision they did not make.
+ */
+export const canApproveCosting = canSelectSupplier;
+
+/** What an order becomes once its costing is approved: waiting for the PR to be raised. */
+export function orderStatusAfterCostingApproval(): OrderStatus {
+  return "FORMULATOR_APPROVED_PENDING_PR";
+}
+
 /**
  * What an order's status should become once a supplier has been handed to CSS. Null means it
  * stays where it is.
