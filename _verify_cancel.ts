@@ -209,9 +209,9 @@ async function main() {
     check("nor the person who cancelled it",
       forSubmitter.filter((c) => c.label.includes(PREFIX)).length, 0);
 
-    // The banner on the orders list is only seen by someone already on that page. The bell
-    // is where people look to find out what has happened to their work.
-    console.log("\n--- and it reaches the bell, not just the orders list ---");
+    // The bell is where people look to find out what has happened to their work — and now
+    // the only place this is said.
+    console.log("\n--- and it reaches the bell ---");
     const bell = await loadOverdueNotifications(approver.id, "ADMIN");
     const cancelRows = bell.filter((n) => n.kind === "CANCELLED" && n.title.includes(PREFIX));
     check("the cancellation is in the bell", cancelRows.length, 1);
@@ -266,9 +266,16 @@ async function main() {
     check("and after the step the request is waiting on",
       detail.indexOf("<CancelPanel") > detail.indexOf("<PrPanel"), true);
 
+    // The bell is the one place this is said. A banner on the orders list said it a second
+    // time, to people who were already there — two places to keep in step, for no reader
+    // the bell doesn't already reach.
     const list = readFileSync("src/app/(app)/orders/page.tsx", "utf8");
-    check("and the people told see it on the orders list",
-      /cancellationsFor\(session\.user\.id, role\)/.test(list), true);
+    check("the orders list doesn't repeat it",
+      /cancellationsFor\(/.test(list), false);
+    check("nor the supplier choice", /checkSelectionReady\(/.test(list), false);
+    // The two Admin queues stay: neither has a home in the bell.
+    check("but the review queue is still flagged there", /awaitingReview > 0/.test(list), true);
+    check("and the PR queue too", /awaitingPr > 0/.test(list), true);
 
     const bellSrc = readFileSync("src/components/notification-bell.tsx", "utf8");
     check("the bell has a group for them", /kind: "CANCELLED"/.test(bellSrc), true);

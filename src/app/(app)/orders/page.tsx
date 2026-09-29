@@ -19,11 +19,9 @@ import {
   ORDER_REQUEST_TYPE_LABELS,
   PLACEHOLDER_NOTE,
   orderLabel,
-  checkSelectionReady,
   orderWaitingOn,
   type OrderRequestType,
 } from "@/lib/orders";
-import { cancellationsFor } from "@/lib/order-cancellations";
 import { OrderFilters } from "./order-filters";
 
 // Submitted requests. The receiving/review step is a separate story, so nothing here acts
@@ -124,12 +122,10 @@ export default async function OrdersPage({
     prisma.sampleOrder.count({ where: worksOrders ? {} : { orderedById: session.user.id } }),
   ]);
 
-  // A request the viewer approved, or any request at all if they coordinate procurement,
-  // that its requester has since withdrawn. Nothing else would tell them.
-  const cancellations = await cancellationsFor(session.user.id, role);
-
   // Phases 1 and 8 — the two queues that are the Admin's. Only they act on either, so only
-  // they are told about them.
+  // they are told about them. The two banners that used to sit below these — a supplier
+  // choice waiting on you, and a request someone withdrew — moved to the notification bell,
+  // which is where people look rather than somewhere they have to already be.
   const [awaitingReview, awaitingPr] = isAdmin
     ? await Promise.all([
         prisma.sampleOrder.count({ where: { status: "SUBMITTED" } }),
@@ -153,12 +149,6 @@ export default async function OrdersPage({
         }))
       ),
     ])
-  );
-
-  // Phase 5 — requests waiting on THIS person to choose a supplier. The Admin banner above
-  // covers their review queue; this covers the decision that is theirs as requester.
-  const needsMyChoice = orders.filter(
-    (o) => o.orderedById === session.user.id && checkSelectionReady(o, o.suppliers).ok
   );
 
   const filtered = Boolean(query || type || status);
@@ -219,54 +209,6 @@ export default async function OrdersPage({
             — the costing has been approved{awaitingPr === 1 ? "" : " on each"}
           </span>
         </Link>
-      )}
-
-      {cancellations.length > 0 && (
-        <section className="rounded-lg border border-neutral-dark/20 bg-neutral-dark/[0.03] px-4 py-3">
-          <h2 className="text-body font-semibold text-neutral-dark">
-            {cancellations.length} request{cancellations.length === 1 ? " was" : "s were"}{" "}
-            cancelled
-          </h2>
-          <ul className="mt-1.5 space-y-1">
-            {cancellations.map((c) => (
-              <li key={c.orderId} className="text-caption text-neutral-dark/70">
-                <Link
-                  href={`/orders/${c.orderId}`}
-                  className="font-medium text-neutral-dark underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
-                >
-                  {c.label}
-                </Link>{" "}
-                — withdrawn by {c.cancelledBy} on {day(c.cancelledAt)}
-                {c.because === "APPROVED" ? ", after you approved it" : ""}
-                {c.reason ? `. “${c.reason}”` : "."}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {needsMyChoice.length > 0 && (
-        <div className="rounded-lg border border-brand-secondary/30 bg-brand-primary/[0.08] px-4 py-3">
-          <p className="text-body text-neutral-dark">
-            <span className="font-semibold">
-              {needsMyChoice.length} of your request{needsMyChoice.length === 1 ? "" : "s"}{" "}
-              {needsMyChoice.length === 1 ? "is" : "are"} waiting for you to choose a supplier
-            </span>{" "}
-            <span className="text-neutral-dark/60">— their documents have been reviewed.</span>
-          </p>
-          <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
-            {needsMyChoice.map((o) => (
-              <li key={o.id}>
-                <Link
-                  href={`/orders/${o.id}`}
-                  className="text-caption font-medium text-neutral-dark underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
-                >
-                  {orderLabel(o)}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
       )}
 
       <OrderFilters q={query} type={type} status={status} />
