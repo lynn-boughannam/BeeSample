@@ -122,10 +122,14 @@ export default async function OrdersPage({
     prisma.sampleOrder.count({ where: worksOrders ? {} : { orderedById: session.user.id } }),
   ]);
 
-  // Phase 1 — the review queue. Only an Admin acts on it, so only they are told about it.
-  const awaitingReview = isAdmin
-    ? await prisma.sampleOrder.count({ where: { status: "SUBMITTED" } })
-    : 0;
+  // Phases 1 and 8 — the two queues that are the Admin's. Only they act on either, so only
+  // they are told about them.
+  const [awaitingReview, awaitingPr] = isAdmin
+    ? await Promise.all([
+        prisma.sampleOrder.count({ where: { status: "SUBMITTED" } }),
+        prisma.sampleOrder.count({ where: { status: "FORMULATOR_APPROVED_PENDING_PR" } }),
+      ])
+    : [0, 0];
 
   // The stored status parks at "Approved – Pending Supply Chain" while the work happens per
   // supplier, so each row also says what it is genuinely waiting on.
@@ -192,6 +196,22 @@ export default async function OrdersPage({
             {awaitingReview} request{awaitingReview === 1 ? "" : "s"} awaiting your review
           </span>
           <span className="text-neutral-dark/60">— open the queue</span>
+        </Link>
+      )}
+
+      {/* Phase 8. Costing approved, waiting on a PR — work nobody would otherwise know had
+          arrived, since it lands on a request they may never have touched. */}
+      {awaitingPr > 0 && status !== "FORMULATOR_APPROVED_PENDING_PR" && (
+        <Link
+          href="/orders?status=FORMULATOR_APPROVED_PENDING_PR"
+          className="text-body flex flex-wrap items-center gap-2 rounded-lg border border-brand-secondary/30 bg-brand-primary/[0.08] px-4 py-3 text-neutral-dark transition-colors duration-150 hover:bg-brand-primary/[0.14] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-primary"
+        >
+          <span className="font-semibold">
+            {awaitingPr} request{awaitingPr === 1 ? "" : "s"} waiting on a PR
+          </span>
+          <span className="text-neutral-dark/60">
+            — the costing has been approved{awaitingPr === 1 ? "" : " on each"}
+          </span>
         </Link>
       )}
 

@@ -667,6 +667,71 @@ export function orderStatusAfterCostingApproval(): OrderStatus {
   return "FORMULATOR_APPROVED_PENDING_PR";
 }
 
+// ---------------------------------------------------------------------------
+// Phase 8 — raising the purchase requisition
+// ---------------------------------------------------------------------------
+
+/** Whether the request is waiting on a PR being raised against it. */
+export function isAwaitingPr(status: OrderStatus): boolean {
+  return status === "FORMULATOR_APPROVED_PENDING_PR";
+}
+
+/**
+ * Raising the PR is administrative, so an Admin does it and a colleague can cover.
+ *
+ * Deliberately unlike the two decisions before it: choosing a supplier and approving its
+ * cost are judgements only the requester can make, but the PR is created in the purchasing
+ * system against a decision that has already been made here. Nobody is signing for anything
+ * new — they are recording a reference.
+ */
+export function canIssuePr(role: string): boolean {
+  return role === "ADMIN";
+}
+
+/**
+ * Whether a PR reference may be recorded, and if not, why.
+ */
+export function checkPrReady(order: {
+  status: string;
+  prNumber?: string | null;
+}): { ok: true } | { ok: false; reason: string } {
+  if (order.status === "REJECTED") {
+    return { ok: false, reason: "This request was rejected." };
+  }
+  if (!isAwaitingPr(order.status as OrderStatus)) {
+    return {
+      ok: false,
+      reason:
+        order.status === "COSTING_SUBMITTED_PENDING_FORMULATOR"
+          ? "The costing hasn't been approved yet."
+          : order.prNumber
+            ? `A PR was already raised for this request (${order.prNumber}).`
+            : "This request isn't waiting on a PR.",
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * A PR reference as it will be stored, or null if it isn't one.
+ *
+ * Only trimmed and length-checked. The format belongs to the purchasing system, not to this
+ * one, and a rule invented here would eventually reject a real PR number — which would mean
+ * the reference that matters cannot be recorded at all.
+ */
+export const MAX_PR_NUMBER_LENGTH = 50;
+
+export function normalisePrNumber(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > MAX_PR_NUMBER_LENGTH) return null;
+  return trimmed;
+}
+
+/** What an order becomes once its PR is raised: waiting for the material to arrive. */
+export function orderStatusAfterPrIssued(): OrderStatus {
+  return "PR_ISSUED_AWAITING_RECEIPT";
+}
+
 /**
  * What an order's status should become once a supplier has been handed to CSS. Null means it
  * stays where it is.

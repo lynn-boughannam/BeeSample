@@ -46,6 +46,13 @@ export async function AdminDashboard({ viewerId }: { viewerId: string }) {
     { label: "Sample Requests", value: kpis.pendingRequests, href: "/requests" },
     { label: "Checked Out", value: kpis.checkedOut, href: "/checked-out" },
     { label: "New Orders", value: kpis.newOrders, href: "/orders" },
+    // Approved, costed, and waiting on somebody to raise the PR. Filtered rather than just
+    // counted, so the tile lands on the requests it is counting.
+    {
+      label: "Awaiting PR",
+      value: kpis.awaitingPr,
+      href: "/orders?status=FORMULATOR_APPROVED_PENDING_PR",
+    },
     { label: "Orders in Progress", value: kpis.ordersInProgress, href: "/orders" },
     { label: "Feedback Due", value: kpis.feedbackDue, href: "/pending-feedback" },
   ];

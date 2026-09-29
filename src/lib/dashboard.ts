@@ -15,6 +15,7 @@ export type DashboardKpis = {
   pendingRequests: number;
   checkedOut: number;
   newOrders: number;
+  awaitingPr: number;
   ordersInProgress: number;
   feedbackDue: number;
 };
@@ -101,6 +102,7 @@ export async function loadAdminDashboard(
     pendingRequests,
     feedbackDue,
     newOrders,
+    awaitingPr,
     ordersInProgress,
     discardedSamples,
   ] = await Promise.all([
@@ -119,6 +121,8 @@ export async function loadAdminDashboard(
     prisma.sampleRequest.count({ where: { status: "APPROVED", feedback: null } }),
     // Newly raised, nobody has acted on it yet.
     prisma.sampleOrder.count({ where: { status: "SUBMITTED" } }),
+    // Approved and costed, waiting on a PR being raised in the purchasing system.
+    prisma.sampleOrder.count({ where: { status: "FORMULATOR_APPROVED_PENDING_PR" } }),
     // Anywhere between approval and arrival — every stage of the workflow that is
     // actively being worked, which is what "in progress" means to whoever reads the tile.
     prisma.sampleOrder.count({
@@ -221,6 +225,7 @@ export async function loadAdminDashboard(
       pendingRequests,
       checkedOut: checkedOutPieces.length,
       newOrders,
+      awaitingPr,
       ordersInProgress,
       feedbackDue,
     },

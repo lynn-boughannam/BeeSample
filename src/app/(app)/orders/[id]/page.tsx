@@ -14,7 +14,9 @@ import {
   canEditOrder,
   isAwaitingAdminReview,
   canApproveCosting,
+  canIssuePr,
   checkCostingApprovalReady,
+  checkPrReady,
   isAwaitingCosting,
   isAwaitingSupplyChain,
   isInSupplierWorkup,
@@ -35,6 +37,8 @@ import { SelectionPanel, type SelectableSupplier } from "./selection-panel";
 import { declineAllSuppliers, selectSupplier } from "./selection-actions";
 import { CostingApprovalPanel } from "./costing-approval-panel";
 import { approveCosting } from "./costing-approval-actions";
+import { PrPanel } from "./pr-panel";
+import { issuePurchaseRequisition } from "./pr-actions";
 import {
   SupplierEntryForm,
   type SupplierDocument,
@@ -157,6 +161,15 @@ export default async function OrderDetailPage({
   const costingApproval = checkCostingApprovalReady(order, order.suppliers);
   const mayApproveCosting =
     canApproveCosting(order, { id: session.user.id }) && costingApproval.ok;
+  // Phase 8 — recording the PR is administrative, so it is the Admin's rather than the
+  // requester's: the decision it acts on has already been made.
+  const mayIssuePr = canIssuePr(role) && checkPrReady(order).ok;
+  // What the PR has to be raised for, summed once here rather than in the panel — the
+  // figures are already on the row above, and two places computing a total is one too many.
+  const costingTotal =
+    chosenSupplier?.cost != null && chosenSupplier.shippingCost != null
+      ? (Number(chosenSupplier.cost) + Number(chosenSupplier.shippingCost)).toFixed(2)
+      : null;
   const selectionReady = checkSelectionReady(order, order.suppliers);
   const approvedOptions: SelectableSupplier[] = selectableSuppliers(order.suppliers).map((s) => ({
     id: s.id,
@@ -240,6 +253,17 @@ export default async function OrderDetailPage({
           shippingCost={chosenSupplier.shippingCost?.toString() ?? ""}
           requiredQuantityG={order.requiredQuantityG?.toString() ?? null}
           action={approveCosting}
+        />
+      )}
+
+      {/* Phase 8 — the PR is raised elsewhere; its reference is recorded here. */}
+      {mayIssuePr && (
+        <PrPanel
+          orderId={order.id}
+          supplierName={chosenSupplier?.supplierName ?? null}
+          total={costingTotal}
+          requiredQuantityG={order.requiredQuantityG?.toString() ?? null}
+          action={issuePurchaseRequisition}
         />
       )}
 
