@@ -299,6 +299,19 @@ export default async function OrderDetailPage({
         </section>
       )}
 
+      {/* Last of the action panels, and deliberately the quietest of them: it is the way
+          out of the workflow rather than a step in it, so it reads after whatever the
+          request is actually waiting for. Buried below the supplier list it was somewhere
+          nobody would look. */}
+      {mayCancel && (
+        <CancelPanel
+          orderId={order.id}
+          statusLabel={ORDER_STATUS_LABELS[status] ?? order.status}
+          prNumber={order.prNumber}
+          action={cancelOrder}
+        />
+      )}
+
       {/* Where the request has reached. Rejected isn't on the track — it ends it. */}
       {status === "REJECTED" ? (
         <section className="rounded-lg border border-danger/30 bg-danger/5 p-4">
@@ -564,15 +577,6 @@ export default async function OrderDetailPage({
           </p>
         )}
       </section>
-
-      {mayCancel && (
-        <CancelPanel
-          orderId={order.id}
-          statusLabel={ORDER_STATUS_LABELS[status] ?? order.status}
-          prNumber={order.prNumber}
-          action={cancelOrder}
-        />
-      )}
 
       <section className="rounded-lg border border-neutral-dark/10 bg-white p-5 shadow-elevated">
         <h2 className="text-section-header mb-4 text-neutral-dark">Purchasing &amp; receipt</h2>

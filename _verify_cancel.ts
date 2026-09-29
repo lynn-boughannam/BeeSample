@@ -239,6 +239,13 @@ async function main() {
 
     const detail = readFileSync("src/app/(app)/orders/[id]/page.tsx", "utf8");
     check("shown only to whoever raised it", /mayCancel && \(/.test(detail), true);
+    // It belongs with the other action panels at the top, not below the supplier list where
+    // nobody would scroll to find it — but last among them, since it is the way out rather
+    // than the next step.
+    check("it sits with the actions, not under the details",
+      detail.indexOf("<CancelPanel") < detail.indexOf("Where the request has reached"), true);
+    check("and after the step the request is waiting on",
+      detail.indexOf("<CancelPanel") > detail.indexOf("<PrPanel"), true);
 
     const list = readFileSync("src/app/(app)/orders/page.tsx", "utf8");
     check("and the people told see it on the orders list",
