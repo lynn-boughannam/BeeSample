@@ -7,6 +7,9 @@ export type NavItem = {
   roles: Role[];
   // Dashboard and Menu Settings are never hideable via Menu Settings.
   pinned?: boolean;
+  // Items tagged "settings" are folded under the System Settings disclosure in the sidebar
+  // instead of sitting in the main list.
+  group?: "settings";
 };
 
 export const NAV_ITEMS: NavItem[] = [
@@ -28,7 +31,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "pending-feedback", label: "Pending Feedback", href: "/pending-feedback", roles: ["ADMIN"] },
   { key: "feedback", label: "Sample Feedback", href: "/feedback", roles: ["ADMIN", "FORMULATOR"] },
   { key: "reports", label: "Reports", href: "/reports", roles: ["ADMIN"] },
-  { key: "lists", label: "Reference Lists", href: "/settings/lists", roles: ["ADMIN"] },
-  { key: "users", label: "User Settings", href: "/settings/users", roles: ["ADMIN"] },
-  { key: "menu-settings", label: "Menu Settings", href: "/settings/menu", roles: ["ADMIN"], pinned: true },
+  { key: "lists", label: "Reference Lists", href: "/settings/lists", roles: ["ADMIN"], group: "settings" },
+  { key: "users", label: "User Settings", href: "/settings/users", roles: ["ADMIN"], group: "settings" },
+  { key: "menu-settings", label: "Menu Settings", href: "/settings/menu", roles: ["ADMIN"], pinned: true, group: "settings" },
 ];

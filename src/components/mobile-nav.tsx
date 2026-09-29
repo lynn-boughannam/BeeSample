@@ -16,42 +16,73 @@ export function MobileNav({
   userName,
   role,
   signOutSlot,
+  bellSlot,
 }: {
   items: NavItem[];
   userName: string;
   role: Role;
   signOutSlot: React.ReactNode;
+  bellSlot: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
 
   return (
     <div className="md:hidden">
       <div className="flex items-center justify-between bg-neutral-dark px-4 py-3">
-        <Image src="/brand/logo-dark.jpg" alt="BeeSample" width={120} height={76} />
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label="Open menu"
-          className="rounded-lg p-2 text-neutral-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-light/40"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
+        <Image
+          src="/brand/logo-dark.jpg"
+          alt="BeeSample"
+          width={120}
+          height={76}
+        />
+        {/* The same actions as the desktop top bar, right-aligned beside the menu. */}
+        <div className="flex items-center gap-1">
+          {bellSlot}
+          {signOutSlot}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="Open menu"
+            className="rounded-full p-2 text-neutral-light transition-colors duration-150 hover:bg-neutral-light/10 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-light/40"
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {open && (
         <div className="fixed inset-0 z-50 flex">
           <div className="flex w-72 flex-col bg-neutral-dark shadow-floating">
             <div className="flex items-center justify-between px-5 py-5">
-              <Image src="/brand/logo-dark.jpg" alt="BeeSample" width={140} height={88} />
+              <Image
+                src="/brand/logo-dark.jpg"
+                alt="BeeSample"
+                width={140}
+                height={88}
+              />
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close menu"
                 className="rounded-lg p-1 text-neutral-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-light/40"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
                 </svg>
               </button>
@@ -61,14 +92,15 @@ export function MobileNav({
                 {userName.charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-body font-medium text-neutral-light">{userName}</p>
+                <p className="truncate text-body font-medium text-neutral-light">
+                  {userName}
+                </p>
               </div>
               <RoleBadge role={role} />
             </div>
             <div onClick={() => setOpen(false)}>
               <AppNav items={items} />
             </div>
-            <div className="border-t border-neutral-light/10 p-3">{signOutSlot}</div>
           </div>
           <button
             type="button"

@@ -774,6 +774,29 @@ export function checkReceiptReady(order: {
   return { ok: true };
 }
 
+/**
+ * Whether receiving this request creates a sample or adds to one that already exists.
+ *
+ * A repeat order of the same material from the same supplier is more of what is already on
+ * the shelf, so it joins that sample's stock — a second library entry for it would split
+ * one material's stock across two rows, and the shelf would hold two entries for one pile.
+ *
+ * A new source does NOT join it, even for the same material. Sample.supplier is a single
+ * value, so mixing another supplier's delivery into the same pieces would make that field
+ * a lie and leave two provenances indistinguishable on the shelf.
+ *
+ * Falls back to creating where a repeat order names no sample to add to — a request typed
+ * as a repeat but never linked has nothing to restock.
+ */
+export function receptionMode(order: {
+  requestType: string;
+  existingSampleId?: string | null;
+}): "RESTOCK" | "CREATE" {
+  return order.requestType === "EXISTING_SAME_SOURCE" && order.existingSampleId
+    ? "RESTOCK"
+    : "CREATE";
+}
+
 /** What an order becomes once its material is on the shelf. */
 export function orderStatusAfterReceipt(): OrderStatus {
   return "RECEIVED";

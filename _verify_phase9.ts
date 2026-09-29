@@ -10,6 +10,7 @@ import {
   checkReceiptReady,
   isAwaitingReceipt,
   orderStatusAfterReceipt,
+  receptionMode,
 } from "./src/lib/orders";
 import { shelfAddress } from "./src/lib/categories";
 import { resolveShelfSlot } from "./src/lib/shelf";
@@ -76,11 +77,19 @@ async function wipe() {
     select: { id: true },
   });
   const sampleIds = samples.map((s) => s.id);
+  // Orders point at these samples two ways — the one they produced, and the one a repeat
+  // was raised against. Both have to let go before the sample can be deleted.
   await prisma.sampleOrder.updateMany({
     where: { producedSampleId: { in: sampleIds } },
     data: { producedSampleId: null },
   });
+  await prisma.sampleOrder.updateMany({
+    where: { existingSampleId: { in: sampleIds } },
+    data: { existingSampleId: null },
+  });
   await prisma.locationHistory.deleteMany({ where: { sampleId: { in: sampleIds } } });
+  // Receipt rows point at the pieces they brought in, so they go first.
+  await prisma.transaction.deleteMany({ where: { sampleId: { in: sampleIds } } });
   await prisma.samplePiece.deleteMany({ where: { sampleId: { in: sampleIds } } });
   await prisma.sampleIngredient.deleteMany({ where: { sampleId: { in: sampleIds } } });
   await prisma.sample.deleteMany({ where: { id: { in: sampleIds } } });
@@ -115,6 +124,20 @@ async function main() {
   check("never twice", done.ok, false);
   check("whatever the status says",
     checkReceiptReady({ status: "RECEIVED", producedSampleId: "s-1" }).ok, false);
+
+  console.log("\n=== a repeat order joins the stock it repeats ===");
+  // More of what is already on the shelf is more of that sample, not a second entry for one
+  // pile. A different supplier is not: Sample.supplier is one value, so mixing two
+  // provenances into the same pieces would make it a lie.
+  check("same material, same supplier, restocks",
+    receptionMode({ requestType: "EXISTING_SAME_SOURCE", existingSampleId: "s-1" }), "RESTOCK");
+  check("same material, new supplier, does not",
+    receptionMode({ requestType: "EXISTING_NEW_SOURCE", existingSampleId: "s-1" }), "CREATE");
+  check("a new material never does",
+    receptionMode({ requestType: "NEW", existingSampleId: null }), "CREATE");
+  // A repeat typed as one but never linked has nothing to restock.
+  check("nor a repeat with no sample linked",
+    receptionMode({ requestType: "EXISTING_SAME_SOURCE", existingSampleId: null }), "CREATE");
 
   console.log("\n=== requested against received ===");
   // A difference is reported, never blocked: the supplier ships what they ship, and
@@ -314,6 +337,104 @@ async function main() {
     check("still one sample for this request",
       await prisma.sample.count({ where: { sampleCode: PREFIX + "SAMPLE" } }), 1);
 
+    // The whole point of the branch: a repeat order must add to the pile already on the
+    // shelf, not stand a second entry next to it.
+    console.log("\n--- a repeat order restocks that same sample ---");
+    const repeat = await prisma.sampleOrder.create({
+      data: {
+        requestType: "EXISTING_SAME_SOURCE",
+        inciName: PREFIX + "MATERIAL REPEAT",
+        existingSampleId: sampleId,
+        requiredQuantityG: "60",
+        supplierName: supplier.name,
+        directorApprovalConfirmed: true,
+        orderedById: formulator.id,
+        status: "PR_ISSUED_AWAITING_RECEIPT",
+        approvedById: admin.id,
+        decidedAt: new Date(),
+        prNumber: PREFIX + "PR-2",
+        prIssuedAt: new Date(),
+      },
+    });
+    check("it is a restock, not a creation", receptionMode(repeat), "RESTOCK");
+
+    const before = await prisma.sample.findUniqueOrThrow({
+      where: { id: sampleId },
+      select: { totalQtyG: true, receivedQtyPcs: true },
+    });
+
+    // Mirrors receiveIntoExistingStock(): two pieces of 30 g added to the existing sample.
+    const addedCents = [toCents(30), toCents(30)];
+    await prisma.$transaction(async (tx) => {
+      const last = await tx.samplePiece.findFirst({
+        where: { sampleId: sampleId! },
+        orderBy: { pieceIndex: "desc" },
+        select: { pieceIndex: true },
+      });
+      let nextIndex = (last?.pieceIndex ?? 0) + 1;
+      for (const cents of addedCents) {
+        const weight = (cents / 100).toFixed(2);
+        const piece = await tx.samplePiece.create({
+          data: {
+            sampleId: sampleId!,
+            pieceIndex: nextIndex,
+            originalWeightG: weight,
+            remainingWeightG: weight,
+            status: "IN_STOCK",
+          },
+        });
+        await tx.transaction.create({
+          data: {
+            sampleId: sampleId!,
+            type: "RECEIPT",
+            quantityG: weight,
+            performedById: admin.id,
+            pieceId: piece.id,
+            note: `Order receipt: +${weight} g received as piece #${nextIndex}`,
+          },
+        });
+        nextIndex++;
+      }
+      await tx.sample.update({
+        where: { id: sampleId! },
+        data: {
+          totalQtyG: ((toCents(Number(before.totalQtyG)) + 6000) / 100).toFixed(2),
+          receivedQtyPcs: before.receivedQtyPcs != null ? before.receivedQtyPcs + 2 : null,
+          receptionDate: new Date("2026-10-05"),
+        },
+      });
+      await tx.sampleOrder.update({
+        where: { id: repeat.id },
+        data: {
+          status: orderStatusAfterReceipt(),
+          receivedAt: new Date("2026-10-05"),
+          receivedSampleCode: PREFIX + "SAMPLE",
+          producedSampleId: sampleId!,
+        },
+      });
+    });
+
+    const after = await prisma.sample.findUniqueOrThrow({
+      where: { id: sampleId! },
+      include: { pieces: { orderBy: { pieceIndex: "asc" } } },
+    });
+    check("no second library entry for the same material",
+      await prisma.sample.count({ where: { sampleCode: { startsWith: PREFIX } } }), 1);
+    check("the pieces joined the existing ones", after.pieces.length, 5);
+    check("numbered on from the last", after.pieces.map((p) => p.pieceIndex).join(","), "1,2,3,4,5");
+    check("the running total grew by what arrived", after.totalQtyG?.toString(), "160");
+    check("and so did the piece count", after.receivedQtyPcs, 5);
+    check("each new piece is intact and in stock",
+      after.pieces.slice(3).every(
+        (p) => p.status === "IN_STOCK" && p.remainingWeightG.toString() === p.originalWeightG.toString()
+      ), true);
+    // Consumption with no matching intake is what the receipt rows prevent.
+    check("the intake is in the sample's history",
+      await prisma.transaction.count({ where: { sampleId: sampleId!, type: "RECEIPT" } }), 2);
+    const repeatAfter = await prisma.sampleOrder.findUniqueOrThrow({ where: { id: repeat.id } });
+    check("the repeat request is closed", repeatAfter.status, "RECEIVED");
+    check("against the sample it restocked", repeatAfter.producedSampleId, sampleId);
+
     console.log("\n=== wiring ===");
     // Both paths through one implementation is the whole basis for the checks above: a
     // second create would drift, and the one that drifted would be the sample nobody typed.
@@ -367,6 +488,25 @@ async function main() {
 
     const detail = readFileSync("src/app/(app)/orders/[id]/page.tsx", "utf8");
     check("the request offers the way in", /mayReceive && \(/.test(detail), true);
+
+    // Which way a reception goes is decided from the stored request, so a stale page can't
+    // restock something that needs its own sample.
+    check("the restock path re-decides on the server",
+      /receptionMode\(order\) !== "RESTOCK"/.test(receiveAction), true);
+    check("and adds to the existing sample rather than creating one",
+      /tx\.samplePiece\.create[\s\S]{0,400}sampleId: sample\.id/.test(receiveAction), true);
+    check("a discarded sample is refused stock",
+      /is discarded\. Restore it before adding stock/.test(receiveAction), true);
+    check("the page branches on the same rule",
+      /receptionMode\(order\) === "RESTOCK"/.test(page), true);
+
+    const restockForm = readFileSync(
+      "src/app/(app)/orders/[id]/receive/restock-form.tsx", "utf8"
+    );
+    check("a restock asks for pieces too", /name="pieceWeights"/.test(restockForm), true);
+    check("with the same Auto and Manual choice", /name="pieceMode"/.test(restockForm), true);
+    check("and compares against what was requested",
+      /compareQuantities\(requestedQuantityG, qtyG\)/.test(restockForm), true);
   } finally {
     await wipe();
     console.log("\ncleanup done");

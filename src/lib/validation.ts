@@ -8,7 +8,13 @@ import {
   SHELF_LETTERS,
 } from "@/lib/categories";
 import { BIODEGRADABILITY, TRISTATE, YES_NO } from "@/lib/ingredients";
-import { PIECE_MODES, pieceSumMessage, sumCents, toCents } from "@/lib/pieces";
+import {
+  MANUAL_PIECE_LIMIT,
+  PIECE_MODES,
+  pieceSumMessage,
+  sumCents,
+  toCents,
+} from "@/lib/pieces";
 import { ORDER_REQUEST_TYPES, needsExistingSample } from "@/lib/orders";
 
 // SLT-13. Function, Physical Form and Supplier are chosen from the admin-managed
@@ -246,6 +252,52 @@ export const AddReceivedStockSchema = z.object({
     .number({ error: "Enter the additional weight received in grams" })
     .positive("Additional weight received must be greater than 0"),
 });
+
+// Receiving a repeat order into a sample that already exists. The same piece rules as
+// creation — auto-split or exact manual weights — but no sample fields: the material is
+// identical to what is already on the shelf, so there is nothing to describe again and
+// nowhere new to put it.
+export const ReceiveIntoStockSchema = z
+  .object({
+    orderId: z.string().min(1),
+    receptionDate: z.coerce.date({ error: "Enter the reception date" }),
+    receivedQtyG: z.coerce
+      .number({ error: "Enter the quantity received in grams" })
+      .positive("Received quantity must be greater than 0"),
+    receivedQtyPcs: z.coerce
+      .number({ error: "Enter how many pieces arrived" })
+      .int("Pieces must be a whole number")
+      .positive("At least one piece must have arrived")
+      .max(MANUAL_PIECE_LIMIT, `Enter at most ${MANUAL_PIECE_LIMIT} pieces`),
+    pieceMode: z.enum(PIECE_MODES, { error: "Choose how piece weights are set" }),
+    pieceWeights: z.array(
+      z.coerce
+        .number({ error: "Enter a weight for every piece" })
+        .positive("Each piece weight must be greater than 0")
+    ),
+  })
+  .superRefine((value, ctx) => {
+    if (value.pieceMode !== "MANUAL") return;
+
+    if (value.pieceWeights.length !== value.receivedQtyPcs) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["pieceWeights"],
+        message: `Enter a weight for all ${value.receivedQtyPcs} pieces.`,
+      });
+      return;
+    }
+
+    const sum = sumCents(value.pieceWeights.map(toCents));
+    const expected = toCents(value.receivedQtyG);
+    if (sum !== expected) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["pieceWeights"],
+        message: pieceSumMessage(sum, expected),
+      });
+    }
+  });
 
 // SLT-55. The Admin picks which pieces expired from the tracked list rather than typing
 // weights — each piece's weight is already known, so there is nothing to re-enter and

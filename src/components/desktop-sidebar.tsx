@@ -17,21 +17,15 @@ function persist(collapsed: boolean) {
   document.cookie = `${SIDEBAR_COOKIE}=${collapsed ? "collapsed" : "expanded"}; path=/; max-age=${oneYear}; samesite=lax`;
 }
 
-// SignOutButton is a Server Component (its inline server action pulls in Prisma/mssql), so
-// both variants arrive already rendered rather than being imported here.
 export function DesktopSidebar({
   items,
   userName,
   role,
-  signOutSlot,
-  signOutIconSlot,
   defaultCollapsed,
 }: {
   items: NavItem[];
   userName: string;
   role: Role;
-  signOutSlot: React.ReactNode;
-  signOutIconSlot: React.ReactNode;
   defaultCollapsed: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
@@ -123,11 +117,8 @@ export function DesktopSidebar({
         )}
       </div>
 
+      {/* Sign out lives in the top bar now, beside the notifications. */}
       <AppNav items={items} collapsed={collapsed} />
-
-      <div className={cn("border-t border-neutral-light/10", collapsed ? "p-2" : "p-3")}>
-        {collapsed ? signOutIconSlot : signOutSlot}
-      </div>
     </aside>
   );
 }

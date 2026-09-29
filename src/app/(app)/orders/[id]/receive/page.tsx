@@ -4,9 +4,11 @@ import { requireAdmin } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { allShelfCombinations } from "@/lib/categories";
 import { loadShelfCellColors, loadShelfOccupancy, resolveShelfDefaults } from "@/lib/shelf";
-import { canReceiveOrder, checkReceiptReady, orderLabel } from "@/lib/orders";
+import { canReceiveOrder, checkReceiptReady, orderLabel, receptionMode } from "@/lib/orders";
+import { shelfAddress } from "@/lib/categories";
 import { SampleForm } from "../../../library/sample-form";
-import { receiveOrder } from "./actions";
+import { RestockForm } from "./restock-form";
+import { receiveOrder, receiveIntoExistingStock } from "./actions";
 
 // Phase 9 — the request becomes a sample.
 //
@@ -27,7 +29,18 @@ export default async function ReceiveOrderPage({
     where: { id },
     include: {
       existingSample: {
-        select: { sampleCode: true, rmName: true, category: true, source: true },
+        select: {
+          id: true,
+          sampleCode: true,
+          rmName: true,
+          category: true,
+          source: true,
+          isDiscarded: true,
+          totalQtyG: true,
+          shelfLetter: true,
+          shelfLevel: true,
+          shelfSublevel: true,
+        },
       },
       ingredients: { select: { ingredientId: true } },
       suppliers: {
@@ -40,6 +53,11 @@ export default async function ReceiveOrderPage({
 
   // The gate is the same one the action re-checks; this only decides what to render.
   const ready = checkReceiptReady(order);
+  // A repeat order of the same material from the same supplier adds to the sample already
+  // on the shelf. Anything else — a new material, or the same one from a different supplier
+  // — becomes its own entry, because Sample.supplier is a single value and mixing two
+  // provenances into one pile would make it a lie.
+  const restocking = receptionMode(order) === "RESTOCK" && order.existingSample;
 
   const [
     ingredients,
@@ -82,10 +100,13 @@ export default async function ReceiveOrderPage({
         >
           ← {orderLabel(order)}
         </Link>
-        <h1 className="text-page-title mt-1 text-neutral-dark">Receive into the library</h1>
+        <h1 className="text-page-title mt-1 text-neutral-dark">
+          {restocking ? "Receive into stock" : "Receive into the library"}
+        </h1>
         <p className="text-body mt-1 text-neutral-dark/60">
-          What the request asked for is filled in below. Check it against the delivery,
-          enter what actually arrived, and saving creates the sample.
+          {restocking
+            ? "A repeat order of a material already on the shelf. Record what arrived and it joins that sample's stock."
+            : "What the request asked for is filled in below. Check it against the delivery, enter what actually arrived, and saving creates the sample."}
         </p>
       </div>
 
@@ -101,6 +122,24 @@ export default async function ReceiveOrderPage({
             </Link>
           )}
         </section>
+      ) : restocking && order.existingSample ? (
+        <RestockForm
+          orderId={order.id}
+          sampleCode={order.existingSample.sampleCode}
+          rmName={order.existingSample.rmName}
+          currentTotalG={order.existingSample.totalQtyG?.toString() ?? "0"}
+          shelfAddress={
+            order.existingSample.shelfLetter && order.existingSample.shelfLevel != null
+              ? shelfAddress(
+                  order.existingSample.shelfLetter,
+                  order.existingSample.shelfLevel,
+                  order.existingSample.shelfSublevel
+                )
+              : "no recorded location"
+          }
+          requestedQuantityG={order.requiredQuantityG}
+          action={receiveIntoExistingStock}
+        />
       ) : (
         <SampleForm
           // A reception creates a sample; the prefill below is not an edit.
