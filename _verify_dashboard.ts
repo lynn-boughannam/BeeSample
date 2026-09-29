@@ -133,7 +133,7 @@ async function main() {
   await prisma.sampleOrder.create({
     data: {
       requestType: "NEW", inciName: PREFIX + "MYCHOICE", supplier1: "Acme", supplier2: "Globex",
-      orderedById: admin.id, status: "COSTING_SUBMITTED_PENDING_FORMULATOR",
+      orderedById: admin.id, status: "CSS_APPROVED_PENDING_FORMULATOR",
       directorApprovalConfirmed: true, approvedById: admin.id, decidedAt: new Date(),
       suppliers: {
         create: [

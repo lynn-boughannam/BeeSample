@@ -27,16 +27,17 @@ export const ORDER_STATUSES = [
   // ALL of them have been submitted: one supplier under review while another still needs a
   // price means Supply Chain's step isn't finished, whatever the first supplier's row says.
   "DETAILS_SUBMITTED_AWAITING_CSS",
-  // Costing comes before selection, not after: Supply Chain prices the options, CSS clears
-  // their documents, and the request is then with the Formulator — whose approval IS the
-  // choice of supplier. The phase 0 brief listed these the other way round, before the
-  // steps existed (corrected 2026-09-28).
-  "COSTING_SUBMITTED_PENDING_FORMULATOR",
-  // One state, not two. Choosing the supplier IS the Formulator's approval — the request
-  // then sits waiting for a PR against the option they picked, so a separate
-  // "Formulator approved — pending PR" only named the same wait a second time. Nothing ever
-  // wrote it (merged 2026-09-28).
+  // CSS has cleared the documents and the request is back with whoever raised it, to pick
+  // one option and correct the quantity. Nothing has been costed yet — landed price and MOQ
+  // are what CSS compared, and they are not the cost.
+  "CSS_APPROVED_PENDING_FORMULATOR",
   "SUPPLIER_SELECTED",
+  // Costing comes AFTER selection: Supply Chain works out cost and shipping for the one
+  // supplier that was chosen, not for options that were never going to be ordered. I had
+  // these the other way round on 2026-09-28, which put the costing status where the wait on
+  // the Formulator's choice belonged; the phase 0 brief had the order right all along
+  // (corrected 2026-09-29).
+  "COSTING_SUBMITTED_PENDING_FORMULATOR",
   "PR_ISSUED_AWAITING_RECEIPT",
   "RECEIVED",
 ] as const;
@@ -47,7 +48,8 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   REJECTED: "Rejected",
   APPROVED_PENDING_SUPPLY_CHAIN: "Approved — awaiting documents & details from Supply Chain",
   DETAILS_SUBMITTED_AWAITING_CSS: "Details submitted — awaiting CSS approval on documents",
-  SUPPLIER_SELECTED: "Supplier selected — pending PR",
+  CSS_APPROVED_PENDING_FORMULATOR: "CSS approved — awaiting Submitter/Formulator",
+  SUPPLIER_SELECTED: "Supplier chosen — pending Supply Chain details",
   COSTING_SUBMITTED_PENDING_FORMULATOR: "Costing submitted — pending Formulator approval",
   PR_ISSUED_AWAITING_RECEIPT: "PR issued — awaiting receipt",
   RECEIVED: "Received",

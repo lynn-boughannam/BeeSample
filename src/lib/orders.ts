@@ -500,7 +500,7 @@ export function checkSelectionReady(
   if (isInSupplierWorkup(order.status as OrderStatus)) {
     return { ok: false, reason: "Supply Chain and CSS haven't finished with this request yet." };
   }
-  if (order.status !== "COSTING_SUBMITTED_PENDING_FORMULATOR") {
+  if (order.status !== "CSS_APPROVED_PENDING_FORMULATOR") {
     return { ok: false, reason: "A supplier has already been chosen for this request." };
   }
   if (suppliers.length === 0) {
@@ -558,6 +558,59 @@ export function canSelectSupplier(
   return order.orderedById === user.id;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 6 — costing the chosen supplier
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether the request is waiting on Supply Chain to cost the supplier that was chosen.
+ *
+ * Costing happens here, after selection, and only for the one option that was picked —
+ * working out cost and shipping for options nobody is going to order is work thrown away.
+ * Landed price and MOQ came earlier and are a different thing: they are what CSS compared
+ * the options on, not what the order will cost.
+ */
+export function isAwaitingCosting(status: OrderStatus): boolean {
+  return status === "SUPPLIER_SELECTED";
+}
+
+/**
+ * Whether costing may be entered against this supplier row, and if not, why.
+ *
+ * The chosen flag is checked on the row rather than taken from the page: the costing screen
+ * shows one supplier, but the action has to know it is still the chosen one.
+ */
+export function checkCostingReady(
+  order: { status: string },
+  supplier: { isSelected: boolean }
+): { ok: true } | { ok: false; reason: string } {
+  if (order.status === "REJECTED") {
+    return { ok: false, reason: "This request was rejected." };
+  }
+  if (!isAwaitingCosting(order.status as OrderStatus)) {
+    return {
+      ok: false,
+      reason:
+        order.status === "CSS_APPROVED_PENDING_FORMULATOR"
+          ? "No supplier has been chosen yet, so there is nothing to cost."
+          : "This request isn't waiting on costing.",
+    };
+  }
+  if (!supplier.isSelected) {
+    return { ok: false, reason: "Only the chosen supplier is costed." };
+  }
+  return { ok: true };
+}
+
+/**
+ * What an order's status becomes once costing has been submitted.
+ *
+ * Unconditional: there is exactly one supplier to cost, so submitting it finishes the step.
+ */
+export function orderStatusAfterCosting(): OrderStatus {
+  return "COSTING_SUBMITTED_PENDING_FORMULATOR";
+}
+
 /**
  * What an order's status should become once a supplier has been handed to CSS. Null means it
  * stays where it is.
@@ -589,5 +642,5 @@ export function orderStatusAfterCssDecision(
   if (!allSuppliersCssDecided(suppliers)) return null;
   // Nothing survived: there is nothing to choose between, so the request ends.
   if (selectableSuppliers(suppliers).length === 0) return "REJECTED";
-  return "COSTING_SUBMITTED_PENDING_FORMULATOR";
+  return "CSS_APPROVED_PENDING_FORMULATOR";
 }

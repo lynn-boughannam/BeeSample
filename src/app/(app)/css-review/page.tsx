@@ -22,7 +22,8 @@ import { approveSupplierDocuments, rejectSupplierDocuments } from "./actions";
 // Phase 4 — the CSS queue.
 //
 // What CSS judges here is a supplier's DOCUMENTS. Costing approval is a later step and
-// belongs to the Formulator (COSTING_SUBMITTED_PENDING_FORMULATOR in the status track);
+// belongs to the Formulator, and the costing itself is worked out later, for the one
+// supplier they choose;
 // landed price and MOQ appear on each row as context for comparing options, not as the
 // thing being decided.
 //

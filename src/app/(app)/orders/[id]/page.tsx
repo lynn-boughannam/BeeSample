@@ -13,6 +13,7 @@ import {
   ORDER_REQUEST_TYPE_LABELS,
   canEditOrder,
   isAwaitingAdminReview,
+  isAwaitingCosting,
   isAwaitingSupplyChain,
   needsDocumentRequest,
   orderWaitingOn,
@@ -34,9 +35,11 @@ import {
   type SupplierDocument,
 } from "../../supply-chain/supplier-entry-form";
 import { SubmitToCssButton } from "../../supply-chain/submit-button";
+import { CostingForm } from "../../supply-chain/costing-form";
 import {
   deleteSupplierDocument,
   saveSupplierSubmission,
+  submitSupplierCosting,
   submitSupplierToCss,
 } from "../../supply-chain/actions";
 import {
@@ -59,6 +62,7 @@ const STATUS_VARIANT: Record<OrderStatus, "info" | "success" | "danger" | "warni
   APPROVED_PENDING_SUPPLY_CHAIN: "warning",
   DETAILS_SUBMITTED_AWAITING_CSS: "info",
   SUPPLIER_SELECTED: "info",
+  CSS_APPROVED_PENDING_FORMULATOR: "warning",
   COSTING_SUBMITTED_PENDING_FORMULATOR: "warning",
   PR_ISSUED_AWAITING_RECEIPT: "info",
   RECEIVED: "success",
@@ -451,6 +455,19 @@ export default async function OrderDetailPage({
                   <p className="text-caption mt-3 text-neutral-dark/60">
                     Sent to CSS {s.submittedToCssAt ? day(s.submittedToCssAt) : ""} — locked.
                   </p>
+                )}
+
+                {/* Phase 6 — costing, for the chosen option only. The action re-checks both
+                    the status and the chosen flag regardless of what this renders. */}
+                {isSupplyChain && isAwaitingCosting(status) && s.isSelected && (
+                  <CostingForm
+                    orderSupplierId={s.id}
+                    supplierName={s.supplierName}
+                    cost={s.cost?.toString() ?? ""}
+                    shippingCost={s.shippingCost?.toString() ?? ""}
+                    requiredQuantityG={order.requiredQuantityG?.toString() ?? null}
+                    action={submitSupplierCosting}
+                  />
                 )}
               </li>
               );

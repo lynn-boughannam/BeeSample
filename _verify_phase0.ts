@@ -122,7 +122,7 @@ async function main() {
     testUsers.every((u) => u.isActive), true);
 
   console.log("\n=== order status sequence ===");
-  check("eight statuses", ORDER_STATUSES.length, 8);
+  check("nine statuses", ORDER_STATUSES.length, 9);
   check("starts at Submitted", ORDER_STATUSES[0], "SUBMITTED");
   check("ends at Received", ORDER_STATUSES[ORDER_STATUSES.length - 1], "RECEIVED");
   // The order they are declared in is the order the workflow runs in, which the progress
@@ -130,13 +130,19 @@ async function main() {
   check("the whole chain, in workflow order",
     ORDER_STATUSES.filter((s) => s !== "REJECTED").join(","),
     "SUBMITTED,APPROVED_PENDING_SUPPLY_CHAIN,DETAILS_SUBMITTED_AWAITING_CSS," +
-      "COSTING_SUBMITTED_PENDING_FORMULATOR,SUPPLIER_SELECTED,PR_ISSUED_AWAITING_RECEIPT,RECEIVED");
-  // Choosing the supplier and approving it are one act, so they are one status. A second
-  // one named the same wait twice and nothing ever wrote it.
-  check("no separate Formulator-approved status",
-    (ORDER_STATUSES as readonly string[]).includes("FORMULATOR_APPROVED_PENDING_PR"), false);
-  check("and the one that remains says what it is waiting for",
-    ORDER_STATUS_LABELS.SUPPLIER_SELECTED, "Supplier selected — pending PR");
+      "CSS_APPROVED_PENDING_FORMULATOR,SUPPLIER_SELECTED,COSTING_SUBMITTED_PENDING_FORMULATOR," +
+      "PR_ISSUED_AWAITING_RECEIPT,RECEIVED");
+  // Costing is worked out for the supplier that was chosen, so it cannot come before the
+  // choice. Having those two the wrong way round is what made the post-CSS wait borrow the
+  // costing status and mean something it didn't.
+  check("costing comes after selection, not before",
+    ORDER_STATUSES.indexOf("COSTING_SUBMITTED_PENDING_FORMULATOR") >
+      ORDER_STATUSES.indexOf("SUPPLIER_SELECTED"), true);
+  check("and the wait on the Formulator's choice is its own status",
+    ORDER_STATUS_LABELS.CSS_APPROVED_PENDING_FORMULATOR,
+    "CSS approved — awaiting Submitter/Formulator");
+  check("selection hands over to Supply Chain, not to a PR",
+    ORDER_STATUS_LABELS.SUPPLIER_SELECTED, "Supplier chosen — pending Supply Chain details");
   check("every status has a label",
     ORDER_STATUSES.every((s) => Boolean(ORDER_STATUS_LABELS[s])), true);
   // Nothing may be left on a status the new sequence doesn't contain.

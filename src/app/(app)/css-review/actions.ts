@@ -5,10 +5,10 @@ import { verifySession } from "@/lib/dal";
 import { prisma } from "@/lib/prisma";
 import { canRecordCssDecision, orderStatusAfterCssDecision } from "@/lib/orders";
 
-// Phase 4 — CSS approves or rejects each supplier's documents independently. Costing is a
-// later step and belongs to the Formulator (COSTING_SUBMITTED_PENDING_FORMULATOR), so what
-// is judged here is the paperwork; price and MOQ are shown alongside it only as context for
-// comparing the options.
+// Phase 4 — CSS approves or rejects each supplier's documents independently. What is judged
+// here is the paperwork; price and MOQ are shown alongside it only as context for comparing
+// the options. Costing is a later step and does not exist yet at this point: Supply Chain
+// works it out for the one supplier the Formulator goes on to choose.
 //
 // A rejected option is eliminated, not sent back to Supply Chain; an order with every
 // option eliminated has nowhere left to go and is rejected outright.

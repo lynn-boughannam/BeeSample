@@ -125,6 +125,7 @@ export async function loadAdminDashboard(
             "APPROVED_PENDING_SUPPLY_CHAIN",
             "DETAILS_SUBMITTED_AWAITING_CSS",
             "SUPPLIER_SELECTED",
+            "CSS_APPROVED_PENDING_FORMULATOR",
             "COSTING_SUBMITTED_PENDING_FORMULATOR",
             "PR_ISSUED_AWAITING_RECEIPT",
           ],
@@ -184,7 +185,7 @@ export async function loadAdminDashboard(
   // decision started advancing the order.
   const myOrders = viewerId
     ? await prisma.sampleOrder.findMany({
-        where: { orderedById: viewerId, status: "COSTING_SUBMITTED_PENDING_FORMULATOR" },
+        where: { orderedById: viewerId, status: "CSS_APPROVED_PENDING_FORMULATOR" },
         include: {
           existingSample: { select: { sampleCode: true, rmName: true } },
           suppliers: { select: { cssDecision: true } },

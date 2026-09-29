@@ -88,7 +88,7 @@ async function main() {
     orderWaitingOn(NEW, [rejectedOne, approvedOne]), null);
   // And nothing is added at the status it moves to either — that status is the answer.
   check("nor at the status it moves to",
-    orderWaitingOn({ status: "COSTING_SUBMITTED_PENDING_FORMULATOR", requestType: "NEW" },
+    orderWaitingOn({ status: "CSS_APPROVED_PENDING_FORMULATOR", requestType: "NEW" },
       [approvedOne, approvedOne]), null);
   // Every option gone is the stored status's business too — but rows saying so while the
   // status still says otherwise have disagreed with it, and that is worth surfacing.

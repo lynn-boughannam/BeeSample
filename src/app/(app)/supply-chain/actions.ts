@@ -7,6 +7,8 @@ import {
   ALLOWED_DOCUMENT_TYPES,
   canEditSupplierSubmission,
   canSubmitSupplierToCss,
+  checkCostingReady,
+  orderStatusAfterCosting,
   orderStatusAfterCssSubmission,
   MAX_DOCUMENTS_PER_UPLOAD,
   MAX_DOCUMENT_BYTES,
@@ -318,4 +320,74 @@ export async function submitSupplierToCss(
   revalidatePath("/supply-chain");
   revalidatePath(`/orders/${row.order.id}`);
   return { ok: `${row.supplierName} sent to CSS. Its documents and pricing are now locked.` };
+}
+
+// Phase 6 — costing the supplier the Formulator chose. Cost and shipping are entered for
+// that one option only: working them out for options nobody is going to order is work
+// thrown away, which is why this comes after selection rather than before it.
+//
+// Saving and submitting are one act here, unlike the earlier per-supplier step. There is a
+// single row to fill in and nothing to compare it against, so a separate submit would be a
+// second click for no decision.
+export async function submitSupplierCosting(
+  _prev: DocumentUploadState,
+  formData: FormData
+): Promise<DocumentUploadState> {
+  const session = await requireSupplyChain();
+  if (!session) return { error: "Only Supply Chain can enter costing." };
+
+  const orderSupplierId = String(formData.get("orderSupplierId") ?? "");
+  if (!orderSupplierId) return { error: "Which supplier?" };
+
+  const row = await prisma.sampleOrderSupplier.findUnique({
+    where: { id: orderSupplierId },
+    include: { order: { select: { id: true, status: true } } },
+  });
+  if (!row) return { error: "That supplier is no longer on the request." };
+
+  // Re-checked against the stored row: the page shows one supplier, but only the row knows
+  // whether it is still the chosen one.
+  const ready = checkCostingReady(row.order, row);
+  if (!ready.ok) return { error: ready.reason };
+
+  const amounts: Record<string, string> = {};
+  for (const [field, label] of [
+    ["cost", "cost"],
+    ["shippingCost", "shipping cost"],
+  ] as const) {
+    const raw = String(formData.get(field) ?? "").trim();
+    if (!raw) return { error: `Enter the ${label}.` };
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return { error: `The ${label} must be a number that isn't negative.` };
+    }
+    // Held as a string so the Decimal column keeps the exact figure, not what a float
+    // rounds it to.
+    amounts[field] = parsed.toFixed(2);
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.sampleOrderSupplier.update({
+        where: { id: orderSupplierId },
+        data: { cost: amounts.cost, shippingCost: amounts.shippingCost },
+      });
+      await tx.sampleOrder.update({
+        where: { id: row.order.id },
+        data: { status: orderStatusAfterCosting() },
+      });
+    });
+  } catch (error) {
+    console.error("submitSupplierCosting failed", error);
+    return { error: "Could not save that costing. Try again." };
+  }
+
+  revalidatePath("/supply-chain");
+  revalidatePath(`/orders/${row.order.id}`);
+  revalidatePath("/orders");
+  revalidatePath("/dashboard");
+
+  return {
+    ok: `Costing submitted for ${row.supplierName}. The request is now with the Formulator.`,
+  };
 }

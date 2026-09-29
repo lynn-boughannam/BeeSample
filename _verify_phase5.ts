@@ -38,7 +38,7 @@ const OPEN = { status: "APPROVED_PENDING_SUPPLY_CHAIN" };
 const WITH_CSS = { status: "DETAILS_SUBMITTED_AWAITING_CSS" };
 // Where CSS has finished and the request is back with the Formulator. The decision that
 // settles the last option moves it here, and only here is a choice available.
-const READY = { status: "COSTING_SUBMITTED_PENDING_FORMULATOR" };
+const READY = { status: "CSS_APPROVED_PENDING_FORMULATOR" };
 const appr = { cssDecision: "APPROVED" };
 const rej = { cssDecision: "REJECTED" };
 const pend = { cssDecision: "PENDING" };
@@ -260,7 +260,7 @@ async function main() {
     now = await reload();
     // The last CSS decision is what hands the request back to the Formulator. Leaving it at
     // "pending Supply Chain" through all of this is what made the status read as a lie.
-    check("the request is now the Formulator's", now.status, "COSTING_SUBMITTED_PENDING_FORMULATOR");
+    check("the request is now the Formulator's", now.status, "CSS_APPROVED_PENDING_FORMULATOR");
     check("ready", checkSelectionReady(now, now.suppliers).ok, true);
     check("two options to choose between", selectableSuppliers(now.suppliers).length, 2);
     check("the rejected one isn't offered",
@@ -280,6 +280,8 @@ async function main() {
       after.suppliers.filter((s) => s.isSelected).length, 1);
     check("the other approved option is not flagged", after.suppliers[0].isSelected, false);
     check("the quantity was corrected", after.requiredQuantityG, "250");
+    // Selection hands over to Supply Chain to cost the option that was picked — costing is
+    // worked out for the chosen supplier, which is why it comes after this and not before.
     check("the request moved on", after.status, "SUPPLIER_SELECTED");
     check("so the badge stops explaining a wait",
       orderWaitingOn(after, after.suppliers.map((s) => ({

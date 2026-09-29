@@ -87,6 +87,25 @@ export default async function SupplyChainPage() {
     orderBy: { decidedAt: "asc" },
   });
 
+  // Phase 6 — requests past selection, waiting on cost and shipping for the one supplier
+  // chosen. A separate query and a separate section: this is one row per ORDER, not per
+  // option, and folding it into a table whose every column is about chasing options would
+  // have meant six empty cells on every row.
+  const awaitingCosting = await prisma.sampleOrder.findMany({
+    where: { status: "SUPPLIER_SELECTED" },
+    select: {
+      id: true,
+      inciName: true,
+      requiredQuantityG: true,
+      existingSample: { select: { sampleCode: true, rmName: true } },
+      suppliers: {
+        where: { isSelected: true },
+        select: { id: true, supplierName: true, landedPrice: true, moq: true },
+      },
+    },
+    orderBy: { decidedAt: "asc" },
+  });
+
   const now = new Date();
 
   const rows = orders
@@ -244,6 +263,50 @@ export default async function SupplyChainPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {awaitingCosting.length > 0 && (
+        <section className="rounded-lg border border-neutral-dark/10 bg-white p-5 shadow-elevated">
+          <h2 className="text-section-header text-neutral-dark">Awaiting costing</h2>
+          <p className="text-body mt-1 text-neutral-dark/60">
+            A supplier has been chosen. Enter cost and shipping for it and the request goes
+            back to the Formulator for approval.
+          </p>
+          <ul className="mt-3 divide-y divide-neutral-dark/8 rounded-md border border-neutral-dark/10">
+            {awaitingCosting.map((order) => {
+              const chosen = order.suppliers[0];
+              return (
+                <li
+                  key={order.id}
+                  className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2.5"
+                >
+                  <Link
+                    href={`/orders/${order.id}`}
+                    className="text-body font-medium text-neutral-dark hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-secondary"
+                  >
+                    {orderLabel(order)}
+                  </Link>
+                  {/* A selected order always has a chosen row, but the queue shouldn't break
+                      if one were ever missing — it should say so. */}
+                  <span className="text-body text-neutral-dark/70">
+                    {chosen ? chosen.supplierName : "no supplier recorded"}
+                  </span>
+                  {order.requiredQuantityG && (
+                    <span className="text-caption text-neutral-dark/50">
+                      {order.requiredQuantityG.toString()} g
+                    </span>
+                  )}
+                  {chosen?.landedPrice && (
+                    <span className="text-caption text-neutral-dark/50">
+                      landed {chosen.landedPrice.toString()}
+                      {chosen.moq ? ` · MOQ ${chosen.moq}` : ""}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
 
       <p className="text-caption text-neutral-dark/55">
