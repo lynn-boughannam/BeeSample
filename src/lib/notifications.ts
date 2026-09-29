@@ -8,24 +8,36 @@ import {
   documentWorkingDaysElapsed,
   supplierDocumentSlaLevel,
 } from "@/lib/working-days";
+import { awaitingDecisionFor } from "@/lib/order-attention";
+import { cancellationsFor } from "@/lib/order-cancellations";
 import type { Role } from "@/lib/types";
 
-// The bell in the top bar lists only things that are past a deadline the app already
-// enforces — the 14-day checkout limit and the two supplier SLAs. Each rule is the same
-// function the owning screen uses to paint its row red, so the bell can't disagree with
-// the page it links to. Sample requests and feedback have no due date, so nothing of
-// theirs can be "overdue" and none appear here.
+// The bell in the top bar lists what is waiting on the person looking: work past a deadline
+// the app already enforces (the 14-day checkout limit and the two supplier SLAs), decisions
+// only they can make, and requests they were working that have since been withdrawn.
+//
+// Every rule is the same function the owning screen uses, so the bell can't disagree with
+// the page it links to. Sample requests and feedback have no due date and no decision
+// attached, so none appear here.
 
-export type NotificationKind = "CHECKOUT" | "DOCUMENTS" | "CSS_REVIEW";
+export type NotificationKind =
+  | "CHECKOUT"
+  | "DOCUMENTS"
+  | "CSS_REVIEW"
+  | "DECISION"
+  | "CANCELLED";
 
 export type OverdueNotification = {
   id: string;
   kind: NotificationKind;
   title: string;
   detail: string;
+  // The short label on the right of the row. Days late for the three SLA kinds; for the
+  // other two it says what the row is instead, since neither is late for anything.
   overdueBy: string;
   href: string;
-  // For ordering: the most overdue first, across kinds.
+  // Sort weight, highest first — days late where something is late, and recency where it
+  // isn't, so the newest cancellation leads its group rather than trailing it.
   daysLate: number;
 };
 
@@ -144,15 +156,61 @@ async function overdueCssReviews(role: Role, now: Date) {
   );
 }
 
+// Decisions that are this person's to make: choosing a supplier, then approving what it
+// costs. Not late — there is no clock on them — but they sit until someone acts, and the
+// bell is where someone looks to find out what is theirs.
+async function decisionsWaiting(userId: string) {
+  const waiting = await awaitingDecisionFor(userId);
+  return waiting.map<OverdueNotification>((item) => ({
+    id: `decision-${item.orderId}`,
+    kind: "DECISION",
+    title: item.label,
+    detail:
+      item.needs === "SUPPLIER"
+        ? "Choose a supplier, or decline them all"
+        : "Approve what the chosen supplier will cost",
+    overdueBy: "waiting on you",
+    href: `/orders/${item.orderId}`,
+    // Above the SLA rows: this is the one kind nobody else can clear.
+    daysLate: Number.MAX_SAFE_INTEGER,
+  }));
+}
+
+// Requests withdrawn by whoever raised them, shown to the people who were working them —
+// otherwise the first they know is a queue quietly getting shorter.
+async function cancellations(userId: string, role: Role, now: Date) {
+  const notices = await cancellationsFor(userId, role);
+  return notices.map<OverdueNotification>((notice) => {
+    const daysAgo = Math.floor(
+      (now.getTime() - notice.cancelledAt.getTime()) / (24 * 60 * 60 * 1000)
+    );
+    return {
+      id: `cancelled-${notice.orderId}`,
+      kind: "CANCELLED",
+      title: notice.label,
+      detail: notice.reason
+        ? `${notice.cancelledBy} — “${notice.reason}”`
+        : `Withdrawn by ${notice.cancelledBy}`,
+      overdueBy: daysAgo === 0 ? "today" : `${plural(daysAgo, "day")} ago`,
+      href: `/orders/${notice.orderId}`,
+      // Negated so the most recent leads the group: nothing here is late, and the newest
+      // withdrawal is the one most likely to still be acted on.
+      daysLate: -daysAgo,
+    };
+  });
+}
+
 export async function loadOverdueNotifications(
   userId: string,
   role: Role,
   now: Date = new Date()
 ): Promise<OverdueNotification[]> {
   const groups = await Promise.all([
+    decisionsWaiting(userId),
     overdueCheckouts(userId, role, now),
     overdueDocuments(role, now),
     overdueCssReviews(role, now),
+    cancellations(userId, role, now),
   ]);
   return groups.flat().sort((a, b) => b.daysLate - a.daysLate);
 }

@@ -5,13 +5,41 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import type { NotificationKind, OverdueNotification } from "@/lib/notifications";
 
-// Grouped by what's late, in the order the work happens: a piece on the shelf floor, then
-// the supplier paperwork, then the review that follows it.
-const GROUPS: { kind: NotificationKind; label: string }[] = [
-  { kind: "CHECKOUT", label: "Checkouts" },
-  { kind: "DOCUMENTS", label: "Supplier documents" },
-  { kind: "CSS_REVIEW", label: "CSS reviews" },
+// Decisions first — they are the only rows nobody else can clear. Then what's late, in the
+// order the work happens: a piece on the shelf floor, then the supplier paperwork, then the
+// review that follows it. Withdrawn requests last: nothing is owed on them, they are just
+// work that has stopped being work.
+//
+// Red stays reserved for what is actually late. A decision waiting on you isn't late —
+// nobody has missed anything — and a withdrawal is only news. Painting all three the same
+// colour would leave the red meaning nothing.
+type Tone = "LATE" | "ACTION" | "INFO";
+
+const GROUPS: { kind: NotificationKind; label: string; tone: Tone }[] = [
+  { kind: "DECISION", label: "Waiting on you", tone: "ACTION" },
+  { kind: "CHECKOUT", label: "Checkouts", tone: "LATE" },
+  { kind: "DOCUMENTS", label: "Supplier documents", tone: "LATE" },
+  { kind: "CSS_REVIEW", label: "CSS reviews", tone: "LATE" },
+  { kind: "CANCELLED", label: "Cancelled requests", tone: "INFO" },
 ];
+
+// Written out rather than composed, because Tailwind only keeps classes it can see whole.
+const TONE_ROW: Record<Tone, string> = {
+  LATE: "hover:bg-danger/[0.05] focus-visible:bg-danger/[0.05] active:bg-danger/10",
+  ACTION:
+    "hover:bg-brand-primary/[0.08] focus-visible:bg-brand-primary/[0.08] active:bg-brand-primary/15",
+  INFO: "hover:bg-neutral-dark/[0.04] focus-visible:bg-neutral-dark/[0.04] active:bg-neutral-dark/[0.07]",
+};
+const TONE_RULE: Record<Tone, string> = {
+  LATE: "bg-danger",
+  ACTION: "bg-brand-secondary",
+  INFO: "bg-neutral-dark/25",
+};
+const TONE_LABEL: Record<Tone, string> = {
+  LATE: "text-danger",
+  ACTION: "text-brand-secondary",
+  INFO: "text-neutral-dark/45",
+};
 
 export function NotificationBell({
   items,
@@ -41,7 +69,8 @@ export function NotificationBell({
     };
   }, [open]);
 
-  const label = count === 0 ? "Notifications, nothing overdue" : `Notifications, ${count} overdue`;
+  const label =
+    count === 0 ? "Notifications, nothing waiting" : `Notifications, ${count} waiting`;
 
   return (
     <div ref={rootRef} className="relative">
@@ -90,9 +119,12 @@ export function NotificationBell({
 
       <div
         role="dialog"
-        aria-label="Overdue items"
+        aria-label="Notifications"
         className={cn(
-          "absolute right-0 top-12 z-50 w-[min(24rem,calc(100vw-2rem))] origin-top-right overflow-hidden rounded-xl bg-white text-neutral-dark shadow-floating ring-1 ring-neutral-dark/[0.06]",
+          // On a phone the bell sits left of the sign-out and menu buttons, so a panel
+          // anchored to it would run off the left edge; there it spans the screen instead.
+          "fixed inset-x-4 top-16 z-50 origin-top md:absolute md:inset-x-auto md:right-0 md:top-12 md:w-[24rem] md:origin-top-right",
+          "overflow-hidden rounded-xl bg-white text-neutral-dark shadow-floating ring-1 ring-neutral-dark/[0.06]",
           "transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.34,1.56,0.64,1)] motion-reduce:transition-none",
           open ? "scale-100 opacity-100" : "pointer-events-none scale-95 opacity-0"
         )}
@@ -100,9 +132,9 @@ export function NotificationBell({
         inert={!open}
       >
         <div className="flex items-baseline justify-between gap-3 border-b border-neutral-dark/[0.08] px-5 py-4">
-          <h2 className="font-display text-body font-semibold tracking-tight">Overdue</h2>
+          <h2 className="font-display text-body font-semibold tracking-tight">Notifications</h2>
           <span className="text-caption text-neutral-dark/55">
-            {count === 0 ? "All on time" : `${count} past due`}
+            {count === 0 ? "All clear" : `${count} item${count === 1 ? "" : "s"}`}
           </span>
         </div>
 
@@ -113,11 +145,11 @@ export function NotificationBell({
                 <path d="m5 12.5 4.5 4.5L19 7.5" />
               </svg>
             </span>
-            <p className="text-body text-neutral-dark/70">Nothing is past its due date.</p>
+            <p className="text-body text-neutral-dark/70">Nothing is waiting on you.</p>
           </div>
         ) : (
           <div className="max-h-[min(28rem,70vh)] overflow-y-auto pb-2">
-            {GROUPS.map(({ kind, label: groupLabel }) => {
+            {GROUPS.map(({ kind, label: groupLabel, tone: rowTone }) => {
               const rows = items.filter((item) => item.kind === kind);
               if (rows.length === 0) return null;
               return (
@@ -131,15 +163,18 @@ export function NotificationBell({
                         <Link
                           href={item.href}
                           onClick={() => setOpen(false)}
-                          className="group flex items-start gap-3 px-5 py-2.5 transition-colors duration-150 hover:bg-danger/[0.05] focus-visible:bg-danger/[0.05] focus-visible:outline-none active:bg-danger/10"
+                          className={`group flex items-start gap-3 px-5 py-2.5 transition-colors duration-150 focus-visible:outline-none ${TONE_ROW[rowTone]}`}
                         >
-                          {/* Same red left rule the owning screens use on an overdue row. */}
-                          <span aria-hidden="true" className="mt-1 h-8 w-[3px] shrink-0 rounded-full bg-danger" />
+                          {/* On a late row, the same red left rule the owning screens use. */}
+                          <span
+                            aria-hidden="true"
+                            className={`mt-1 h-8 w-[3px] shrink-0 rounded-full ${TONE_RULE[rowTone]}`}
+                          />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-body font-medium">{item.title}</span>
                             <span className="block truncate text-caption text-neutral-dark/55">{item.detail}</span>
                           </span>
-                          <span className="shrink-0 pt-0.5 text-caption font-semibold text-danger">
+                          <span className={`shrink-0 pt-0.5 text-caption font-semibold ${TONE_LABEL[rowTone]}`}>
                             {item.overdueBy}
                           </span>
                         </Link>

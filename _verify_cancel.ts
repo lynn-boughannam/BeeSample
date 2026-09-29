@@ -4,6 +4,7 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaMssql } from "@prisma/adapter-mssql";
 import { parseMssqlUrl } from "./src/lib/mssql-url";
 import { cancellationsFor } from "./src/lib/order-cancellations";
+import { loadOverdueNotifications } from "./src/lib/notifications";
 import {
   CANCELLATION_NOTICE_DAYS,
   canCancelOrder,
@@ -208,6 +209,24 @@ async function main() {
     check("nor the person who cancelled it",
       forSubmitter.filter((c) => c.label.includes(PREFIX)).length, 0);
 
+    // The banner on the orders list is only seen by someone already on that page. The bell
+    // is where people look to find out what has happened to their work.
+    console.log("\n--- and it reaches the bell, not just the orders list ---");
+    const bell = await loadOverdueNotifications(approver.id, "ADMIN");
+    const cancelRows = bell.filter((n) => n.kind === "CANCELLED" && n.title.includes(PREFIX));
+    check("the cancellation is in the bell", cancelRows.length, 1);
+    check("saying who withdrew it and why",
+      cancelRows[0]?.detail, 'Cancel Submitter — “Project dropped”');
+    check("it links to the request", cancelRows[0]?.href.includes("/orders/"), true);
+    check("and is dated rather than called late", cancelRows[0]?.overdueBy, "today");
+    // Nothing is owed on a withdrawal, so it must not be counted as an SLA breach.
+    check("it isn't filed as overdue work",
+      bell.some((n) => n.kind === "CANCELLED" && n.daysLate > 0), false);
+
+    const bellForBystander = await loadOverdueNotifications(bystander.id, "CSS");
+    check("and reaches nobody who wasn't working it",
+      bellForBystander.some((n) => n.title.includes(PREFIX)), false);
+
     console.log("\n--- it ages out rather than sitting there forever ---");
     await prisma.sampleOrder.update({
       where: { id: built.id },
@@ -250,6 +269,24 @@ async function main() {
     const list = readFileSync("src/app/(app)/orders/page.tsx", "utf8");
     check("and the people told see it on the orders list",
       /cancellationsFor\(session\.user\.id, role\)/.test(list), true);
+
+    const bellSrc = readFileSync("src/components/notification-bell.tsx", "utf8");
+    check("the bell has a group for them", /kind: "CANCELLED"/.test(bellSrc), true);
+    check("and one for decisions waiting on you", /kind: "DECISION"/.test(bellSrc), true);
+    // Red is what the app uses for a missed deadline. Neither of these is one.
+    check("neither is painted as late",
+      /CANCELLED", label: "Cancelled requests", tone: "INFO"/.test(bellSrc), true);
+    check("decisions read as action, not lateness",
+      /DECISION", label: "Waiting on you", tone: "ACTION"/.test(bellSrc), true);
+
+    const dash = readFileSync("src/lib/dashboard.ts", "utf8");
+    const notif = readFileSync("src/lib/notifications.ts", "utf8");
+    // One definition of "waiting on this person", or the dashboard and the bell would
+    // eventually disagree about which requests qualify.
+    for (const [name, src] of [["dashboard", dash], ["bell", notif]] as const) {
+      check(`${name} asks the shared helper`, /awaitingDecisionFor\(/.test(src), true);
+      check(`${name} doesn't re-derive it`, /checkSelectionReady\(/.test(src), false);
+    }
   } finally {
     await wipe();
     console.log("\ncleanup done");

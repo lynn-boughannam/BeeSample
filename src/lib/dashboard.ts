@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { loadSampleStock } from "@/lib/stock-queries";
 import { loadCategoryColors } from "@/lib/shelf";
 import { stockLevel, EMPTY_STOCK, type StockLevel, type SampleStock } from "@/lib/stock";
-import { checkCostingApprovalReady, checkSelectionReady, orderLabel } from "@/lib/orders";
+import { orderLabel } from "@/lib/orders";
+import { awaitingDecisionFor } from "@/lib/order-attention";
 
 // Everything the Admin dashboard shows, assembled in one place so the page stays a
 // rendering concern and the numbers can be verified without a browser (SLT-59).
@@ -191,34 +192,16 @@ export async function loadAdminDashboard(
     a.formulatorName.localeCompare(b.formulatorName)
   );
 
-  // Requests this viewer raised that are waiting on a decision of theirs. Narrowed to the
-  // two statuses those decisions open at — the checks below are still the authority, and
-  // querying Supply Chain's status instead made this silently always empty once the CSS
-  // decision started advancing the order.
-  const myOrders = viewerId
-    ? await prisma.sampleOrder.findMany({
-        where: {
-          orderedById: viewerId,
-          status: { in: ["CSS_APPROVED_PENDING_FORMULATOR", "COSTING_SUBMITTED_PENDING_FORMULATOR"] },
-        },
-        include: {
-          existingSample: { select: { sampleCode: true, rmName: true } },
-          suppliers: {
-            select: { cssDecision: true, isSelected: true, cost: true, shippingCost: true },
-          },
-        },
-      })
+  // Requests this viewer raised that are waiting on a decision of theirs. Shared with the
+  // bell, which says the same thing — two queries would eventually disagree about which
+  // requests qualify, and the one that drifted would be the one nobody checked.
+  const awaitingMyChoice: AwaitingMyChoice[] = viewerId
+    ? (await awaitingDecisionFor(viewerId)).map((item) => ({
+        id: item.orderId,
+        label: item.label,
+        needs: item.needs,
+      }))
     : [];
-  const awaitingMyChoice: AwaitingMyChoice[] = myOrders.flatMap<AwaitingMyChoice>((o) => {
-    const label = orderLabel(o);
-    if (checkSelectionReady(o, o.suppliers).ok) {
-      return [{ id: o.id, label, needs: "SUPPLIER" }];
-    }
-    if (checkCostingApprovalReady(o, o.suppliers).ok) {
-      return [{ id: o.id, label, needs: "COSTING" }];
-    }
-    return [];
-  });
 
   return {
     awaitingMyChoice,

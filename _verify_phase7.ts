@@ -199,9 +199,16 @@ async function main() {
     check("the panel shows only when approval is due",
       /mayApproveCosting && chosenSupplier/.test(detail), true);
 
-    const dash = readFileSync("src/lib/dashboard.ts", "utf8");
+    // "Waiting on this person" is derived in one place and read by the dashboard, the
+    // orders list and the bell, so the gate here is the gate they all show.
+    const attention = readFileSync("src/lib/order-attention.ts", "utf8");
     check("the requester is told it is waiting on them",
-      /checkCostingApprovalReady\(o, o\.suppliers\)\.ok/.test(dash), true);
+      /checkCostingApprovalReady\(order, order\.suppliers\)\.ok/.test(attention), true);
+    check("alongside the supplier choice",
+      /checkSelectionReady\(order, order\.suppliers\)\.ok/.test(attention), true);
+    const dash = readFileSync("src/lib/dashboard.ts", "utf8");
+    check("and the dashboard reads that rather than its own",
+      /awaitingDecisionFor\(/.test(dash), true);
   } finally {
     await prisma.sampleOrderSupplier.deleteMany({
       where: { order: { inciName: { startsWith: PREFIX } } },
