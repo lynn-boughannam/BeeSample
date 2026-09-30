@@ -37,6 +37,11 @@ const TRANSACTION_VARIANT: Record<string, "success" | "warning" | "info" | "dang
   MOVE: "neutral",
 };
 
+// Session-gated and read live from the database, so no version of this page could be
+// prerendered. Saying so keeps Next from spawning a worker to collect static paths for
+// the route — see AGENTS.md.
+export const dynamic = "force-dynamic";
+
 export default async function SampleDetailPage({
   params,
 }: {

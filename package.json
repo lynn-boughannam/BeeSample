@@ -2,6 +2,9 @@
   "name": "sample-library-tracking",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -12,7 +15,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "predev": "node scripts/check-prisma-client.mjs"
+    "predev": "node scripts/check-node.mjs && node scripts/check-prisma-client.mjs",
+    "prebuild": "node scripts/check-node.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

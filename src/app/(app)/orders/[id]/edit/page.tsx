@@ -10,6 +10,11 @@ import { updateSampleOrder } from "../../actions";
 
 // Phase 1 — the Admin editing a request while reviewing it. Same form as raising one, so
 // the two can't drift on what a request contains.
+// Session-gated and read live from the database, so no version of this page could be
+// prerendered. Saying so keeps Next from spawning a worker to collect static paths for
+// the route — see AGENTS.md.
+export const dynamic = "force-dynamic";
+
 export default async function EditOrderPage({
   params,
 }: {

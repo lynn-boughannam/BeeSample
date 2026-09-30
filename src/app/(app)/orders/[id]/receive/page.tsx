@@ -16,6 +16,11 @@ import { receiveOrder, receiveIntoExistingStock } from "./actions";
 // of sample entry: what arrives needs pieces and a shelf slot exactly as a directly-entered
 // sample does, and reusing the form is what guarantees it gets them.
 
+// Session-gated and read live from the database, so no version of this page could be
+// prerendered. Saying so keeps Next from spawning a worker to collect static paths for
+// the route — see AGENTS.md.
+export const dynamic = "force-dynamic";
+
 export default async function ReceiveOrderPage({
   params,
 }: {

@@ -49,10 +49,19 @@ the page 500s, and a server action's POST surfaces in the browser as "an unexpec
 
 Two things to know:
 
-- The route now declares `export const dynamic = "force-dynamic"`. It is session-gated and
-  read live, so static paths could only ever come back empty — and not asking removed the
-  crash entirely (0 worker errors, 0 EPIPEs, 8 consecutive 200s where it had been failing).
-  Any page that can't be prerendered is better off saying so.
+- **Every** dynamic route now declares `export const dynamic = "force-dynamic"`. All of them
+  are session-gated and read live, so static paths could only ever come back empty. Doing
+  only `/orders/[id]` first was not enough: its own failures dropped from 47 to 1, but
+  `/orders/[id]/receive` and `/library/[id]` then started failing instead, because each
+  dynamic route gets its own collection attempt. With all seven declared, driving every one
+  of them twice produced 0 failures.
+- **Node 16.15.1 is first on this machine's PATH**, at `C:\Program Files
+odejs`, and Next 16
+  requires >= 20.9.0. The v24 that actually works lives under
+  `%LOCALAPPDATA%\Microsoft\WinGet\Packages\OpenJS.NodeJS.LTS_*
+ode-v24.19.0-win-x64`.
+  `npm run dev` and `npm run build` now refuse to start on the wrong one
+  (`scripts/check-node.mjs`) rather than failing later in ways that never mention Node.
 - Kaspersky Endpoint Security injects a script into pages served from localhost and wraps
   `window.fetch` — a failed RSC fetch in the log has
   `gc.kes.v2.scr.kaspersky-labs.com/.../main.js` in its stack. It is the prime suspect for
