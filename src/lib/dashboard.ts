@@ -120,8 +120,10 @@ export async function loadAdminDashboard(
       orderBy: { checkedOutAt: "desc" },
     }),
     prisma.sampleRequest.count({ where: { status: "PENDING" } }),
-    // Approved but never reported on — the same definition the Formulator dashboard uses.
-    prisma.sampleRequest.count({ where: { status: "APPROVED", feedback: null } }),
+    // Handed over but never reported on — the same definition the Formulator dashboard uses.
+    // GIVEN, not APPROVED: a piece in someone's hands is what creates the obligation to say
+    // how it went, and GIVEN is the state that means that.
+    prisma.sampleRequest.count({ where: { status: "GIVEN", feedback: null } }),
     // Newly raised, nobody has acted on it yet.
     prisma.sampleOrder.count({ where: { status: "SUBMITTED" } }),
     // Approved and costed, waiting on a PR being raised in the purchasing system.
@@ -241,7 +243,8 @@ export async function loadActivity(): Promise<ActivityEntry[]> {
       include: {
         sample: { select: { id: true, sampleCode: true } },
         requestedBy: { select: { name: true } },
-        approvedBy: { select: { name: true } },
+        decidedBy: { select: { name: true } },
+        piece: { select: { pieceIndex: true } },
       },
       orderBy: { createdAt: "desc" },
       take: PER_SOURCE,
@@ -282,7 +285,9 @@ export async function loadActivity(): Promise<ActivityEntry[]> {
     entries.push({
       id: `req-${r.id}`,
       kind: "REQUEST",
-      description: `${r.requestedBy.name} requested ${g(r.amountG)} g of ${r.sample.sampleCode} — ${r.purpose}`,
+      description: `${r.requestedBy.name} requested ${
+        r.piece ? `piece #${r.piece.pieceIndex} of ` : ""
+      }${r.sample.sampleCode}${r.purpose ? ` — ${r.purpose}` : ""}`,
       at: r.createdAt,
       href: `/library/${r.sample.id}`,
     });
@@ -292,7 +297,7 @@ export async function loadActivity(): Promise<ActivityEntry[]> {
         id: `req-${r.id}-decided`,
         kind: "REQUEST",
         description: `Request for ${r.sample.sampleCode} ${r.status.toLowerCase()}${
-          r.approvedBy ? ` by ${r.approvedBy.name}` : ""
+          r.decidedBy ? ` by ${r.decidedBy.name}` : ""
         }`,
         at: r.decidedAt,
         href: `/library/${r.sample.id}`,

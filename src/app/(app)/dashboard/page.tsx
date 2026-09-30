@@ -23,8 +23,9 @@ async function FormulatorDashboard({ userId }: { userId: string }) {
       take: 10,
     }),
     prisma.sampleRequest.findMany({
-      where: { requestedById: userId, status: "APPROVED", feedback: null },
-      include: { sample: true },
+      // GIVEN, matching the Admin KPI: a piece in your hands is what you owe a report on.
+      where: { requestedById: userId, status: "GIVEN", feedback: null },
+      include: { sample: true, piece: { select: { pieceIndex: true } } },
     }),
     // SLT-40. Pieces an Admin currently has checked out to this user — read-only, same
     // as everywhere else a Formulator sees their custody.
@@ -88,8 +89,12 @@ async function FormulatorDashboard({ userId }: { userId: string }) {
           <Empty />
         ) : (
           <Table
-            rows={feedbackDue.map((r) => [r.sample.rmName, `${r.amountG}g`, r.purpose])}
-            headers={["Sample", "Amount", "Purpose"]}
+            rows={feedbackDue.map((r) => [
+              r.sample.rmName,
+              r.piece ? `#${r.piece.pieceIndex}` : "—",
+              r.purpose ?? "—",
+            ])}
+            headers={["Sample", "Piece", "Purpose"]}
           />
         )}
       </Section>

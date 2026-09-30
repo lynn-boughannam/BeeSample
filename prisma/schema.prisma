@@ -66,7 +66,7 @@ model User {
   samplesCreated  Sample[]          @relation("CreatedBy")
   samplesDiscarded Sample[]         @relation("DiscardedBy")
   requestsMade    SampleRequest[]   @relation("RequestedBy")
-  requestsApproved SampleRequest[]  @relation("ApprovedBy")
+  requestsDecided  SampleRequest[]  @relation("RequestDecidedBy")
   ordersMade      SampleOrder[]     @relation("OrderedBy")
   ordersApproved  SampleOrder[]     @relation("OrderApprovedBy")
   feedbackGiven   Feedback[]        @relation("SubmittedBy")
@@ -314,6 +314,7 @@ model SamplePiece {
   createdAt          DateTime  @default(now())
 
   transactions       Transaction[]
+  requests           SampleRequest[]
 
   @@unique([sampleId, pieceIndex])
   @@index([sampleId, status])
@@ -411,12 +412,28 @@ model SampleRequest {
   sample        Sample        @relation(fields: [sampleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   requestedById String
   requestedBy   User          @relation("RequestedBy", fields: [requestedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  amountG       Decimal       @db.Decimal(10, 2)
-  purpose       String
+  // A request names the physical piece it wants, not a weight: the formulator is asking for
+  // that jar off that shelf, and its weight is already recorded on the piece. Nullable only
+  // because the column was added to an existing model; every request made through the app
+  // has one.
+  pieceId       String?
+  piece         SamplePiece?  @relation(fields: [pieceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // Optional now that a piece carries the weight. Kept for a request that predates piece
+  // tracking, and for a purpose someone chooses to record.
+  amountG       Decimal?      @db.Decimal(10, 2)
+  purpose       String?
+
+  // PENDING | GIVEN | REJECTED | CANCELLED — see PIECE_REQUEST_STATUSES in lib/piece-requests.
   status        String        @default("PENDING")
-  approvedById  String?
-  approvedBy    User?         @relation("ApprovedBy", fields: [approvedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // Whoever answered it, either way. Not "approvedBy": the same person records a rejection,
+  // and a column that only names one outcome makes the other one read as an approval.
+  decidedById   String?
+  decidedBy     User?         @relation("RequestDecidedBy", fields: [decidedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
   decidedAt     DateTime?
+  // Required when rejecting: the formulator has to know why they aren't getting it.
+  rejectionReason String?
   actualUsageG  Decimal?      @db.Decimal(10, 2)
   createdAt     DateTime      @default(now())
 

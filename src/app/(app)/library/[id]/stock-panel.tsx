@@ -11,6 +11,9 @@ import {
   type PieceStatus,
 } from "@/lib/stock";
 import type { StockActionState } from "./stock-actions";
+import type { PieceRequestState } from "../../requests/actions";
+import { pieceUnavailableReason } from "@/lib/piece-requests";
+import { RequestPieceButton } from "./request-piece-button";
 
 export type PieceRow = {
   id: string;
@@ -24,6 +27,11 @@ export type PieceRow = {
   // formatted string. Same levels as every other screen (SLT-57).
   checkoutWarning: CheckoutWarningLevel;
   discardReason: string | null;
+  // Who has an open request on this piece, if anyone — the reason it can't be asked for
+  // again, and the name the row shows instead of a bare greyed-out cell (AC A2).
+  pendingRequestByName: string | null;
+  // Set only when the open request is the viewer's own, which is the one they may withdraw.
+  myPendingRequestId: string | null;
 };
 
 type Formulator = { id: string; name: string };
@@ -48,6 +56,9 @@ export function StockPanel({
   isDiscarded,
   today,
   sampleId,
+  canRequest,
+  requestAction,
+  cancelRequestAction,
   checkoutAction,
   logUsageAction,
   addStockAction,
@@ -64,6 +75,11 @@ export function StockPanel({
   // picker's ceiling matches the clock the action validates against, and so the markup
   // doesn't differ between the server render and hydration.
   today: string;
+  // A Formulator asks for a piece rather than taking it; an Admin hands pieces out directly
+  // and has no use for the request step.
+  canRequest: boolean;
+  requestAction: (prev: PieceRequestState, fd: FormData) => Promise<PieceRequestState>;
+  cancelRequestAction: (prev: PieceRequestState, fd: FormData) => Promise<PieceRequestState>;
   checkoutAction: (prev: StockActionState, fd: FormData) => Promise<StockActionState>;
   logUsageAction: (prev: StockActionState, fd: FormData) => Promise<StockActionState>;
   addStockAction: (prev: StockActionState, fd: FormData) => Promise<StockActionState>;
@@ -164,12 +180,30 @@ export function StockPanel({
                       {piece.checkedOutAt ? ` since ${piece.checkedOutAt}` : ""}
                     </span>
                   )}
+                  {piece.pendingRequestByName && piece.status === "IN_STOCK" && (
+                    <span className="text-caption rounded bg-brand-primary/10 px-1.5 py-0.5 text-neutral-dark/70">
+                      requested by {piece.pendingRequestByName}
+                    </span>
+                  )}
                   {piece.status === "DISCARDED" && piece.discardReason && (
                     <span className="text-caption text-neutral-dark/60">
                       {piece.discardReason}
                     </span>
                   )}
                 </div>
+
+                {/* AC A1/A2/A3 — ask for this piece, withdraw your own request, or be told
+                    plainly why neither is on offer. */}
+                {!discardMode && canRequest && !isDiscarded && (
+                  <RequestPieceButton
+                    pieceId={piece.id}
+                    pieceIndex={piece.pieceIndex}
+                    unavailableReason={pieceUnavailableReason(piece)}
+                    myRequestId={piece.myPendingRequestId}
+                    requestAction={requestAction}
+                    cancelAction={cancelRequestAction}
+                  />
+                )}
 
                 {!discardMode && isAdmin && !isDiscarded && piece.status === "IN_STOCK" && formulators.length > 0 && (
                   <Button

@@ -9,6 +9,8 @@ import { SwatchChip } from "@/components/ui/badge";
 import { Badge } from "@/components/ui/badge";
 import { SampleActions } from "./sample-actions";
 import { StockPanel, type PieceRow } from "./stock-panel";
+import { canRequestPiece } from "@/lib/piece-requests";
+import { cancelPieceRequest, requestPiece } from "../../requests/actions";
 import { discardSample, restoreSample, deleteSample } from "./actions";
 import { addReceivedStock, checkoutPiece, discardPieces, logPieceUsage } from "./stock-actions";
 import { stockFromPieces, getCheckoutWarningLevel, type PieceStatus } from "@/lib/stock";
@@ -49,7 +51,8 @@ export default async function SampleDetailPage({
 }) {
   const { id } = await params;
   const session = await verifySession();
-  const isAdmin = session.user.role === "ADMIN";
+  const role = session.user.role;
+  const isAdmin = role === "ADMIN";
 
   const sample = await prisma.sample.findUnique({
     where: { id },
@@ -57,7 +60,17 @@ export default async function SampleDetailPage({
       ingredients: { include: { ingredient: true } },
       pieces: {
         orderBy: { pieceIndex: "asc" },
-        include: { checkedOutToUser: { select: { name: true } } },
+        include: {
+          checkedOutToUser: { select: { name: true } },
+          // Only the open one matters: a piece with a pending request can't be asked for
+          // again, and the requester's name is what the row shows instead of a bare
+          // greyed-out cell (AC A2).
+          requests: {
+            where: { status: "PENDING" },
+            select: { id: true, requestedById: true, requestedBy: { select: { name: true } } },
+            take: 1,
+          },
+        },
       },
       locationHistory: { include: { movedBy: true }, orderBy: { movedAt: "desc" } },
       createdBy: true,
@@ -110,6 +123,11 @@ export default async function SampleDetailPage({
     checkedOutAt: p.checkedOutAt ? day(p.checkedOutAt) : null,
     checkoutWarning: getCheckoutWarningLevel(p.checkedOutAt),
     discardReason: p.discardReason,
+    pendingRequestByName: p.requests[0]?.requestedBy.name ?? null,
+    // Their own request is the one they can withdraw; somebody else's is just a reason the
+    // piece is unavailable.
+    myPendingRequestId:
+      p.requests[0]?.requestedById === session.user.id ? p.requests[0].id : null,
   }));
   const shelfSwatch =
     shelfColors[shelfCellKey(sample.shelfLetter, sample.shelfLevel)] ?? "#CCCCCC";
@@ -246,6 +264,9 @@ export default async function SampleDetailPage({
           isDiscarded={sample.isDiscarded}
           today={localDay(new Date())}
           sampleId={sample.id}
+          canRequest={canRequestPiece(role)}
+          requestAction={requestPiece}
+          cancelRequestAction={cancelPieceRequest}
           checkoutAction={checkoutPiece}
           logUsageAction={logPieceUsage}
           addStockAction={addReceivedStock}

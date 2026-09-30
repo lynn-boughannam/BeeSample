@@ -103,13 +103,13 @@ async function main() {
   const approvedNoFeedback = await prisma.sampleRequest.create({
     data: {
       sampleId: healthy.id, requestedById: formulator.id, amountG: "3.00", purpose: "Batch",
-      status: "APPROVED", approvedById: admin.id, decidedAt: new Date("2026-09-13"),
+      status: "GIVEN", decidedById: admin.id, decidedAt: new Date("2026-09-13"),
     },
   });
   const approvedWithFeedback = await prisma.sampleRequest.create({
     data: {
       sampleId: healthy.id, requestedById: formulator.id, amountG: "1.00", purpose: "Done",
-      status: "APPROVED", approvedById: admin.id, decidedAt: new Date("2026-09-11"),
+      status: "GIVEN", decidedById: admin.id, decidedAt: new Date("2026-09-11"),
     },
   });
   await prisma.feedback.create({
