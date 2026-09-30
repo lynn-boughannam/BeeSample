@@ -158,6 +158,40 @@ export const REVIEW_TARGET: Record<ReviewDecision, OrderStatus> = {
   REJECT: "REJECTED",
 };
 
+// The stages that only exist because a supplier has to be found, chased and cleared. A
+// same-source repeat has one supplier and its documents already on file, so it has none of
+// them to pass through.
+const WORKUP_STEPS = new Set<OrderStatus>([
+  "APPROVED_PENDING_SUPPLY_CHAIN",
+  "DETAILS_SUBMITTED_AWAITING_CSS",
+  "CSS_APPROVED_PENDING_FORMULATOR",
+]);
+
+/** Whether this kind of request skips the find-and-clear-a-supplier stages entirely. */
+export function skipsSupplierWorkup(type: OrderRequestType): boolean {
+  return type === "EXISTING_SAME_SOURCE";
+}
+
+/**
+ * Where an approved request lands, which depends on what kind it is.
+ *
+ * A same-source repeat goes straight to costing: there is one supplier, its paperwork is on
+ * file, and there is nothing for Supply Chain to chase or CSS to clear. Rejection is the
+ * same wherever it comes from.
+ */
+export function reviewTarget(decision: ReviewDecision, type: OrderRequestType): OrderStatus {
+  if (decision === "REJECT") return REVIEW_TARGET.REJECT;
+  return skipsSupplierWorkup(type) ? "SUPPLIER_SELECTED" : REVIEW_TARGET.APPROVE;
+}
+
+/** The steps this request will actually pass through, for its progress track. */
+export function orderStatusSequenceFor(
+  sequence: readonly OrderStatus[],
+  type: OrderRequestType
+): OrderStatus[] {
+  return skipsSupplierWorkup(type) ? sequence.filter((s) => !WORKUP_STEPS.has(s)) : [...sequence];
+}
+
 /**
  * Whether a review decision may be applied to an order in this state, and if not, why.
  *
@@ -670,6 +704,41 @@ export function checkCostingApprovalReady(
  * Admin signing here would put their name to a decision they did not make.
  */
 export const canApproveCosting = canSelectSupplier;
+
+/**
+ * Whether the quantity on a request was changed from what was originally asked for.
+ *
+ * Supply Chain costs whatever quantity is in front of them, so a silent correction is how
+ * someone ends up pricing 100 g when 250 g is wanted. originalQuantityG is only set when a
+ * change actually happened, so its presence IS the answer.
+ */
+export function quantityWasRevised(order: {
+  originalQuantityG?: string | null;
+  requiredQuantityG?: string | null;
+}): boolean {
+  const before = (order.originalQuantityG ?? "").trim();
+  if (!before) return false;
+  return before !== (order.requiredQuantityG ?? "").trim();
+}
+
+/**
+ * Whether the Formulator may send this costing back to be redone.
+ *
+ * The same gate as approving it: both are what they do with a costing that has been
+ * submitted, and rejecting is not a lesser act that should be available any wider.
+ */
+export const checkCostingRejectionReady = checkCostingApprovalReady;
+
+/**
+ * Where a rejected costing goes: back to Supply Chain, to be worked out again.
+ *
+ * Not to Rejected. "This price doesn't work" is a request for different numbers, not the end
+ * of the request — and a Formulator who wants it over cancels it, which is a different act
+ * with a different name.
+ */
+export function orderStatusAfterCostingRejection(): OrderStatus {
+  return "SUPPLIER_SELECTED";
+}
 
 /** What an order becomes once its costing is approved: waiting for the PR to be raised. */
 export function orderStatusAfterCostingApproval(): OrderStatus {

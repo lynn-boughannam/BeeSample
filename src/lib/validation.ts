@@ -329,6 +329,9 @@ export const CreateSampleOrderSchema = z
     // Chosen from the master list. Free-text inciName carries anything not in it yet.
     ingredientIds: z.array(z.string().min(1)).default([]),
     inciName: orderText,
+    // What the material is called. Optional: a brand-new material may not have a settled
+    // name when it is first asked for, and refusing the request over that would be absurd.
+    sampleName: orderText,
     physicalForm: orderText,
     category: orderText,
     source: orderText,
@@ -341,7 +344,6 @@ export const CreateSampleOrderSchema = z
     dosageOfUse: orderText,
     requiredQuantityG: orderText,
     referenceLink: orderText,
-    requiredDocuments: orderText,
 
     supplierName: orderText,
     supplier1: orderText,
@@ -382,6 +384,9 @@ export const UpdateSampleOrderSchema = z
     ingredientIds: z.array(z.string().min(1)).default([]),
 
     inciName: orderText,
+    // What the material is called. Optional: a brand-new material may not have a settled
+    // name when it is first asked for, and refusing the request over that would be absurd.
+    sampleName: orderText,
     physicalForm: orderText,
     category: orderText,
     source: orderText,
@@ -394,7 +399,6 @@ export const UpdateSampleOrderSchema = z
     dosageOfUse: orderText,
     requiredQuantityG: orderText,
     referenceLink: orderText,
-    requiredDocuments: orderText,
 
     supplierName: orderText,
     supplier1: orderText,

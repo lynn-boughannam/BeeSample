@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push && prisma generate && node -e \"console.log('\n  Schema pushed. Restart `next dev` \u2014 it does not watch the generated client.\n')\"",
+    "db:push": "prisma db push && prisma generate && node scripts/say-restart.mjs",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",

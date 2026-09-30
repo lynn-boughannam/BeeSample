@@ -15,6 +15,7 @@ import {
   isAwaitingAdminReview,
   canApproveCosting,
   canCancelOrder,
+  quantityWasRevised,
   canIssuePr,
   checkCancelReady,
   canReceiveOrder,
@@ -41,7 +42,7 @@ import { approveOrder, rejectOrder } from "./review-actions";
 import { SelectionPanel, type SelectableSupplier } from "./selection-panel";
 import { declineAllSuppliers, selectSupplier } from "./selection-actions";
 import { CostingApprovalPanel } from "./costing-approval-panel";
-import { approveCosting } from "./costing-approval-actions";
+import { approveCosting, rejectCosting } from "./costing-approval-actions";
 import { PrPanel } from "./pr-panel";
 import { issuePurchaseRequisition } from "./pr-actions";
 import { CancelPanel } from "./cancel-panel";
@@ -276,6 +277,7 @@ export default async function OrderDetailPage({
           shippingCost={chosenSupplier.shippingCost?.toString() ?? ""}
           requiredQuantityG={order.requiredQuantityG?.toString() ?? null}
           action={approveCosting}
+          rejectAction={rejectCosting}
         />
       )}
 
@@ -288,6 +290,23 @@ export default async function OrderDetailPage({
           requiredQuantityG={order.requiredQuantityG?.toString() ?? null}
           action={issuePurchaseRequisition}
         />
+      )}
+
+      {/* Sent back by the requester. Shown to everyone rather than only to Supply Chain:
+          the Formulator should see what they asked for, and an Admin looking at a request
+          that went backwards should not have to guess why. */}
+      {order.costingRejectionReason && isAwaitingCosting(status) && (
+        <section className="rounded-lg border border-warning/40 bg-warning/10 p-4">
+          <h2 className="text-section-header text-on-warning">Costing sent back</h2>
+          <p className="text-body mt-1 text-neutral-dark/80">
+            {order.costingRejectionReason}
+          </p>
+          <p className="text-caption mt-1 text-neutral-dark/60">
+            Rejected by {order.orderedBy.name}
+            {order.costingRejectedAt ? ` on ${day(order.costingRejectedAt)}` : ""} — enter a
+            new cost and shipping below.
+          </p>
+        </section>
       )}
 
       {/* Phase 9 — the material has arrived and becomes a sample. */}
@@ -414,8 +433,27 @@ export default async function OrderDetailPage({
           <Field label="Application">{order.application || <Missing />}</Field>
           <Field label="Product format">{order.productFormat || <Missing />}</Field>
           <Field label="Dosage of use">{order.dosageOfUse || <Missing />}</Field>
-          <Field label="Required quantity">{order.requiredQuantityG || <Missing />}</Field>
-          <Field label="Required documents">{order.requiredDocuments || <Missing />}</Field>
+          <Field label="Sample name">{order.sampleName || <Missing />}</Field>
+          <Field label="Required quantity">
+            {order.requiredQuantityG ? (
+              quantityWasRevised(order) ? (
+                // Supply Chain costs whatever number is in front of them, so a correction
+                // has to announce itself rather than sit there looking original.
+                <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
+                  <span className="rounded bg-warning/20 px-1.5 py-0.5 font-semibold text-on-warning">
+                    {order.requiredQuantityG} g
+                  </span>
+                  <span className="text-caption text-neutral-dark/60">
+                    revised by the requester, was {order.originalQuantityG} g
+                  </span>
+                </span>
+              ) : (
+                order.requiredQuantityG
+              )
+            ) : (
+              <Missing />
+            )}
+          </Field>
         </dl>
         {order.referenceLink && (
           <p className="text-caption mt-4 text-neutral-dark/70">

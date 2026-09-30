@@ -8,6 +8,7 @@ import {
   SUPPLIER_STAGE_LABELS,
   needsDocumentRequest,
   orderLabel,
+  quantityWasRevised,
   supplierStageForOrder,
   type OrderRequestType,
   type SupplierStage,
@@ -66,7 +67,7 @@ export default async function SupplyChainPage() {
       inciName: true,
       decidedAt: true,
       requiredQuantityG: true,
-      requiredDocuments: true,
+      originalQuantityG: true,
       existingSample: { select: { sampleCode: true, rmName: true } },
       suppliers: {
         orderBy: { position: "asc" },
@@ -144,7 +145,7 @@ export default async function SupplyChainPage() {
           landedPrice: supplier.landedPrice?.toString() ?? null,
           moq: supplier.moq,
           requiredQuantityG: order.requiredQuantityG,
-          requiredDocuments: order.requiredDocuments,
+          quantityRevised: quantityWasRevised(order),
           stage,
           sla,
           due,
@@ -245,7 +246,7 @@ export default async function SupplyChainPage() {
                   <Td>
                     <span className="text-caption text-neutral-dark/70">
                       {row.requiredQuantityG ? `${row.requiredQuantityG} g` : "—"}
-                      {row.requiredDocuments ? ` · ${row.requiredDocuments}` : ""}
+                      {row.quantityRevised ? " · quantity revised by the requester" : ""}
                     </span>
                   </Td>
                   <Td>

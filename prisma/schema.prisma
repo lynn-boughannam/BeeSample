@@ -448,6 +448,10 @@ model SampleOrder {
   // requested before anyone has added its ingredients. Selections from the list live in
   // `ingredients` below.
   inciName     String?
+  // What the material is called, as opposed to what it is made of. INCI is chemistry; a
+  // formulator asks for "Beeswax, refined". Carried into the Sample's rmName at reception,
+  // which previously had to fall back to the INCI string.
+  sampleName   String?
   physicalForm String?
   category     String?
   source       String?
@@ -460,7 +464,14 @@ model SampleOrder {
   productFormat      String?
   dosageOfUse        String?
   requiredQuantityG  String?
+  // What was asked for before the Formulator corrected it while choosing a supplier. Null
+  // means it was never changed — so Supply Chain can tell "confirmed 250 g" from "was 100 g,
+  // now 250 g" without keeping a second history table.
+  originalQuantityG  String?
   referenceLink      String?
+  // No longer collected: the formulator was being asked which documents a supplier should
+  // send, which is Supply Chain's and CSS's business, not theirs. Kept nullable so the rows
+  // that recorded one don't lose it; drop the column next time the schema is migrated.
   requiredDocuments  String?
 
   // Types 2 and 3 name a single supplier. A brand-new RM is asked for three options
@@ -501,6 +512,12 @@ model SampleOrder {
 
   // Reception. receivedSampleCode is the code assigned when the arriving material is
   // booked into the library; producedSample is the row it became, once it exists.
+  // A Formulator can send a costing back to be redone rather than only approving it. The
+  // reason travels with it, because "too dear" and "wrong quantity priced" need different
+  // work from Supply Chain.
+  costingRejectionReason String?
+  costingRejectedAt      DateTime?
+
   receivedAt         DateTime?
   receivedSampleCode String?
   // Deliberately NOT @unique, for the same reason as Transaction.requestId: SQL Server

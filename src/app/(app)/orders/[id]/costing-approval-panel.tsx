@@ -19,6 +19,7 @@ export function CostingApprovalPanel({
   shippingCost,
   requiredQuantityG,
   action,
+  rejectAction,
 }: {
   orderId: string;
   supplierName: string;
@@ -26,11 +27,26 @@ export function CostingApprovalPanel({
   shippingCost: string;
   requiredQuantityG: string | null;
   action: (prev: CostingApprovalState, fd: FormData) => Promise<CostingApprovalState>;
+  rejectAction: (prev: CostingApprovalState, fd: FormData) => Promise<CostingApprovalState>;
 }) {
   const [state, submit, pending] = useActionState(action, undefined);
+  const [rejectState, reject, rejecting] = useActionState(rejectAction, undefined);
   const formRef = useRef<HTMLFormElement>(null);
+  const rejectRef = useRef<HTMLFormElement>(null);
   const [attested, setAttested] = useState(false);
   const [showAttestation, setShowAttestation] = useState(false);
+  const [reason, setReason] = useState("");
+  const [confirmedReject, setConfirmedReject] = useState(false);
+  const [askingReject, setAskingReject] = useState(false);
+
+  // Rejecting asks for a reason before it goes. Supply Chain has to act on it, and "too
+  // dear" and "you priced the wrong quantity" need different work from them.
+  function handleReject(event: React.FormEvent<HTMLFormElement>) {
+    if (!confirmedReject) {
+      event.preventDefault();
+      setAskingReject(true);
+    }
+  }
 
   // The dialog is the gate. Approval is held back until it has been acknowledged, and the
   // action refuses the attestation field's absence regardless — this only decides when the
@@ -63,14 +79,47 @@ export function CostingApprovalPanel({
         <input type="hidden" name="orderId" value={orderId} />
         {/* Only ever posted once the attestation has actually been confirmed. */}
         {attested && <input type="hidden" name="directorApprovalConfirmed" value="on" />}
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || rejecting}>
           {pending ? "Approving…" : "Approve costing"}
         </Button>
       </form>
 
-      {state?.error && <p className="text-caption mt-2 text-danger">{state.error}</p>}
-      {!state?.error && state?.ok && (
-        <p className="text-caption mt-2 text-on-success">{state.ok}</p>
+      {/* Its own form, a sibling rather than nested — and the quieter of the two, because
+          sending work back is the exception. */}
+      <form ref={rejectRef} action={reject} onSubmit={handleReject} className="mt-2">
+        <input type="hidden" name="orderId" value={orderId} />
+        <input type="hidden" name="costingRejectionReason" value={reason} />
+        <Button type="submit" variant="secondary" disabled={pending || rejecting}>
+          {rejecting ? "Sending back…" : "Reject costing"}
+        </Button>
+      </form>
+
+      {(state?.error ?? rejectState?.error) && (
+        <p className="text-caption mt-2 text-danger">{state?.error ?? rejectState?.error}</p>
+      )}
+      {!state?.error && !rejectState?.error && (state?.ok ?? rejectState?.ok) && (
+        <p className="text-caption mt-2 text-on-success">{state?.ok ?? rejectState?.ok}</p>
+      )}
+
+      {askingReject && (
+        <ConfirmDialog
+          title="Send this costing back?"
+          body="Supply Chain will be asked to work it out again. The request stays open — cancel it instead if it is no longer wanted."
+          detail={`${supplierName} · ${Number.isFinite(total) ? total.toFixed(2) : "—"} including shipping.`}
+          confirmLabel="Send it back"
+          reasonLabel="What is wrong with it?"
+          reasonPlaceholder="e.g. the price is above budget for this quantity"
+          reasonValue={reason}
+          reasonRequired
+          onReasonChange={setReason}
+          onConfirm={() => {
+            setConfirmedReject(true);
+            setAskingReject(false);
+            // Next tick, so the reason is in the hidden field before the form goes.
+            setTimeout(() => rejectRef.current?.requestSubmit(), 0);
+          }}
+          onCancel={() => setAskingReject(false)}
+        />
       )}
 
       {showAttestation && (

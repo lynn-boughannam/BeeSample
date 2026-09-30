@@ -13,7 +13,6 @@ import {
   PLACEHOLDER_APPLICATIONS,
   PLACEHOLDER_NOTE,
   PLACEHOLDER_PRODUCT_FORMATS,
-  PLACEHOLDER_REQUIRED_DOCUMENTS,
   SHORT_SUPPLIER_LIST_PROMPT,
   filledSupplierCount,
   needsExistingSample,
@@ -56,7 +55,7 @@ export type OrderFormInitial = {
   dosageOfUse: string;
   requiredQuantityG: string;
   referenceLink: string;
-  requiredDocuments: string;
+  sampleName: string;
   supplierName: string;
   supplier1: string;
   supplier2: string;
@@ -128,7 +127,7 @@ export function OrderForm({
     dosageOfUse: initial?.dosageOfUse ?? "",
     requiredQuantityG: initial?.requiredQuantityG ?? "",
     referenceLink: initial?.referenceLink ?? "",
-    requiredDocuments: initial?.requiredDocuments ?? "",
+    sampleName: initial?.sampleName ?? "",
   });
 
   function setRequestField(name: keyof typeof request, value: string) {
@@ -410,6 +409,21 @@ export function OrderForm({
             : "Nothing is pre-filled for a brand-new material."}
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
+          {/* What the material is called, as opposed to what it is made of. INCI is
+              chemistry; this is the name it will carry in the library once it arrives. */}
+          <div className="sm:col-span-2">
+            <FormField label="Sample name" htmlFor="sampleName" error={errors.sampleName}>
+              <Input
+                id="sampleName"
+                name="sampleName"
+                value={request.sampleName}
+                onChange={(e) => setRequestField("sampleName", e.target.value)}
+                placeholder="e.g. Beeswax, refined"
+                invalid={Boolean(errors.sampleName)}
+              />
+            </FormField>
+          </div>
+
           {/* Picked from the master Ingredient List rather than typed, so a request links
               to real records. Spans both columns — it's a list, not a one-line field. */}
           <div className="sm:col-span-2">
@@ -628,19 +642,6 @@ export function OrderForm({
               value={request.requiredQuantityG}
               onChange={(e) => setRequestField("requiredQuantityG", e.target.value)}
             />
-          </FormField>
-          <FormField label="Required Documents" htmlFor="requiredDocuments">
-            <Select
-              id="requiredDocuments"
-              name="requiredDocuments"
-              value={request.requiredDocuments}
-              onChange={(e) => setRequestField("requiredDocuments", e.target.value)}
-            >
-              <option value="">Select…</option>
-              {PLACEHOLDER_REQUIRED_DOCUMENTS.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </Select>
           </FormField>
           <div className="sm:col-span-2">
             <FormField label="Reference / Link" htmlFor="referenceLink">

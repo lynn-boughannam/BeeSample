@@ -108,7 +108,7 @@ export default async function EditOrderPage({
     dosageOfUse: order.dosageOfUse ?? "",
     requiredQuantityG: order.requiredQuantityG ?? "",
     referenceLink: order.referenceLink ?? "",
-    requiredDocuments: order.requiredDocuments ?? "",
+    sampleName: order.sampleName ?? "",
     supplierName: order.supplierName ?? "",
     supplier1: order.supplier1 ?? "",
     supplier2: order.supplier2 ?? "",

@@ -165,7 +165,13 @@ export default async function ReceiveOrderPage({
             // No sample to edit — this form is creating one.
             id: "",
             sampleCode: "",
-            rmName: order.inciName?.trim() || order.existingSample?.rmName || "",
+            // The name the requester gave it leads, then the sample it was raised against,
+            // then the INCI as a last resort — a chemical name is a poor label for a jar.
+            rmName:
+              order.sampleName?.trim() ||
+              order.existingSample?.rmName ||
+              order.inciName?.trim() ||
+              "",
             category: order.category ?? order.existingSample?.category ?? "",
             fragranceOrientation: "",
             function: order.function ?? "",

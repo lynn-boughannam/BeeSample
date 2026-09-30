@@ -28,6 +28,9 @@ export async function selectSupplier(
       id: true,
       status: true,
       orderedById: true,
+      // Needed to tell a correction from a confirmation — see the comment below.
+      requiredQuantityG: true,
+      originalQuantityG: true,
       suppliers: { select: { id: true, supplierName: true, cssDecision: true } },
     },
   });
@@ -58,6 +61,17 @@ export async function selectSupplier(
     requiredQuantityG = String(quantity);
   }
 
+  // Supply Chain costs whatever quantity is in front of them, so a correction made here has
+  // to be visible rather than silent — otherwise someone prices 100 g when 250 g is wanted.
+  // The first change keeps what was originally asked for; later ones don't overwrite it,
+  // because "what the request came in as" is the useful comparison, not "what it was a
+  // minute ago". Confirming the same number is not a change and records nothing.
+  const previous = (order.requiredQuantityG ?? "").trim();
+  const revised =
+    requiredQuantityG !== undefined &&
+    requiredQuantityG !== previous &&
+    !order.originalQuantityG;
+
   try {
     await prisma.$transaction(async (tx) => {
       // Cleared first so the chosen one is the only one flagged, even if an earlier
@@ -75,6 +89,7 @@ export async function selectSupplier(
         data: {
           status: "SUPPLIER_SELECTED",
           ...(requiredQuantityG ? { requiredQuantityG } : {}),
+          ...(revised ? { originalQuantityG: previous || null } : {}),
         },
       });
     });
