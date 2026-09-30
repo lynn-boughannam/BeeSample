@@ -25,6 +25,7 @@ import {
   isAwaitingSupplyChain,
   isInSupplierWorkup,
   needsDocumentRequest,
+  orderStatusSequenceFor,
   orderWaitingOn,
   canSelectSupplier,
   checkSelectionReady,
@@ -95,6 +96,12 @@ const STAGE_VARIANT: Record<SupplierStage, "neutral" | "warning" | "info" | "suc
 };
 
 
+// Session-gated and read live from the database, so there is no version of this page that
+// could be prerendered. Saying so stops Next spawning a worker to collect static paths for
+// the route — work that can only ever come back empty, and that has been crashing its child
+// process on this machine (see AGENTS.md).
+export const dynamic = "force-dynamic";
+
 export default async function OrderDetailPage({
   params,
   searchParams,
@@ -156,7 +163,10 @@ export default async function OrderDetailPage({
     cssDecision: s.cssDecision,
     submittedToCssAt: s.submittedToCssAt,
   })));
-  const stepIndex = ORDER_STATUS_SEQUENCE.indexOf(status);
+  // A same-source repeat never passes through documents, CSS or selection, so its track
+  // leaves those steps out rather than showing them as skipped-over "done".
+  const steps = orderStatusSequenceFor(ORDER_STATUS_SEQUENCE, order.requestType as OrderRequestType);
+  const stepIndex = steps.indexOf(status);
 
   // Phase 5. Choosing belongs to whoever submitted the request — no Admin stand-in, because
   // this is a judgement about whether the terms suit the work, not an administrative step.
@@ -328,7 +338,7 @@ export default async function OrderDetailPage({
         <section className="rounded-lg border border-neutral-dark/10 bg-white p-5 shadow-elevated">
           <h2 className="text-section-header mb-3 text-neutral-dark">Progress</h2>
           <ol className="flex flex-wrap gap-2">
-            {ORDER_STATUS_SEQUENCE.map((step, i) => {
+            {steps.map((step, i) => {
               const done = i < stepIndex;
               const current = i === stepIndex;
               return (

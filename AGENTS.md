@@ -31,6 +31,37 @@ changed but `prisma generate` wasn't run. It cannot catch the more common one �
 changed and regenerated while the server keeps running — so **restart after every schema
 change regardless**. `npm run db:push` pushes, regenerates, and says so.
 
+## "An unexpected response was received from the server" is usually not your code
+
+Seen on 2026-09-30 clicking a button on `/orders/[id]`. The browser blamed the component
+that owned the action; the server log told a different story:
+
+```
+⨯ Failed to generate static paths for /orders/[id]:
+Error: Jest worker encountered 2 child process exceptions, exceeding retry limit
+Error: write EPIPE
+```
+
+Next spawns a worker to collect static paths even for a dynamic route with no
+`generateStaticParams`. On this machine that child process keeps dying — 47 worker errors
+and 18 EPIPEs in one session, all naming that one route. Once it has died, every request to
+the page 500s, and a server action's POST surfaces in the browser as "an unexpected response".
+
+Two things to know:
+
+- The route now declares `export const dynamic = "force-dynamic"`. It is session-gated and
+  read live, so static paths could only ever come back empty — and not asking removed the
+  crash entirely (0 worker errors, 0 EPIPEs, 8 consecutive 200s where it had been failing).
+  Any page that can't be prerendered is better off saying so.
+- Kaspersky Endpoint Security injects a script into pages served from localhost and wraps
+  `window.fetch` — a failed RSC fetch in the log has
+  `gc.kes.v2.scr.kaspersky-labs.com/.../main.js` in its stack. It is the prime suspect for
+  the dying children too. If this recurs, excluding the project directory and `node.exe`
+  from its scanning is the fix, and that needs IT on a managed machine.
+
+Before reaching for a restart, read the log. `next build` compiling the route and the
+verification suites passing is good evidence the fault is not in the code.
+
 ## SQL Server treats NULLs as equal in a UNIQUE constraint
 
 A nullable `@unique` column allows exactly **one** NULL row across the whole table, so the
