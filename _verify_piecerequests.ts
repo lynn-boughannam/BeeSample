@@ -5,6 +5,8 @@ import { PrismaMssql } from "@prisma/adapter-mssql";
 import { parseMssqlUrl } from "./src/lib/mssql-url";
 import { formatDay } from "./src/lib/dates";
 import {
+  PIECE_REQUEST_STATUSES,
+  isPieceRequestOpen,
   canDecidePieceRequest,
   canRequestPiece,
   checkCancellable,
@@ -137,6 +139,12 @@ async function main() {
   check("an Admin decides", canDecidePieceRequest("ADMIN"), true);
   check("a Formulator cannot decide", canDecidePieceRequest("FORMULATOR"), false);
   check("nor Supply Chain", canDecidePieceRequest("SUPPLY_CHAIN"), false);
+
+  // Asked for, handed over, used, brought back, shelved — plus the two ways it never left.
+  check("the whole loop is in the statuses",
+    PIECE_REQUEST_STATUSES.join(","), "PENDING,GIVEN,RETURNED,REJECTED,CANCELLED");
+  check("only pending waits on anyone", isPieceRequestOpen("PENDING"), true);
+  check("returned does not", isPieceRequestOpen("RETURNED"), false);
 
   console.log("\n=== AC A2: what makes a piece unaskable, and what it says ===");
   check("on the shelf and unclaimed", pieceIsRequestable({ status: "IN_STOCK" }), true);
@@ -346,6 +354,9 @@ async function main() {
     const held = await prisma.samplePiece.findUniqueOrThrow({ where: { id: p1.id } });
     check("p1 is out with Mo", held.status, "CHECKED_OUT");
     const returnedOn = new Date(2026, 8, 25); // 25 Sep 2026, local midnight
+    const openReq = await prisma.sampleRequest.findFirstOrThrow({
+      where: { pieceId: p1.id, status: "GIVEN" },
+    });
     await prisma.$transaction(async (tx) => {
       await tx.samplePiece.update({
         where: { id: p1.id },
@@ -354,6 +365,15 @@ async function main() {
           status: "IN_STOCK",
           checkedOutToUserId: null,
           checkedOutAt: null,
+        },
+      });
+      await tx.sampleRequest.update({
+        where: { id: openReq.id },
+        data: {
+          status: "RETURNED",
+          actualUsageG: "12.00",
+          decidedAt: returnedOn,
+          decidedById: admin.id,
         },
       });
       await tx.transaction.create({
@@ -383,6 +403,12 @@ async function main() {
     check("and names who had it", movement.subjectUserId, mo.id);
     check("a returned piece can be asked for again",
       pieceIsRequestable({ status: back.status }), true);
+    // The loop is closed on the record too, not just on the piece: given, used, returned.
+    const closed = await prisma.sampleRequest.findUniqueOrThrow({ where: { id: openReq.id } });
+    check("the request reads returned, not given", closed.status, "RETURNED");
+    check("with what was actually used", closed.actualUsageG?.toString(), "12");
+    check("dated when it came back", formatDay(closed.decidedAt!), "2026-09-25");
+    check("and it is no longer open", isPieceRequestOpen(closed.status), false);
     if (outReq) await prisma.sampleRequest.delete({ where: { id: outReq.id } });
 
     console.log("\n=== wiring ===");
@@ -423,6 +449,13 @@ async function main() {
     check("named for both halves", /label: "Requests & Checkouts"/.test(nav), true);
 
     const usage = readFileSync("src/app/(app)/library/[id]/stock-actions.ts", "utf8");
+    // One act: the piece goes back on the shelf and the request closes together.
+    check("the return closes the request it went out on",
+      /\$transaction[\s\S]{0,900}status: "RETURNED"/.test(usage), true);
+    check("and records what was used on it",
+      /actualUsageG: centsToGrams\(usedCents\)/.test(usage), true);
+    check("a piece handed over directly closes nothing",
+      /if \(piece\.requests\[0\]\)/.test(usage), true);
     // A return gets recorded after the fact as often as a checkout does.
     check("the return takes a date", /returnedAt: formData\.get\("returnedAt"\)/.test(usage), true);
     check("a future one is refused", /A return can't be dated in the future/.test(usage), true);

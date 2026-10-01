@@ -38,6 +38,8 @@ const selectRequest = {
   decidedAt: true,
   rejectionReason: true,
   purpose: true,
+  // What actually got used, recorded when the piece came back.
+  actualUsageG: true,
   requestedById: true,
   requestedBy: { select: { name: true } },
   decidedBy: { select: { name: true } },
@@ -243,7 +245,9 @@ export default async function RequestsPage() {
       </section>
 
       <section>
-        <h2 className="text-section-header mb-2 text-neutral-dark">Answered</h2>
+        {/* The closed end of the loop: handed over, used, brought back and shelved — plus
+            the ones that never left, because they were refused or withdrawn. */}
+        <h2 className="text-section-header mb-2 text-neutral-dark">Given &amp; returned</h2>
         <Table>
           <TableHead>
             <TableRow>
@@ -251,13 +255,17 @@ export default async function RequestsPage() {
               {decides && <TableHeaderCell>Formulator</TableHeaderCell>}
               <TableHeaderCell>Sample</TableHeaderCell>
               <TableHeaderCell>Piece</TableHeaderCell>
+              <TableHeaderCell>Used</TableHeaderCell>
               <TableHeaderCell>Outcome</TableHeaderCell>
               <TableHeaderCell>By</TableHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {history.length === 0 ? (
-              <TableEmpty colSpan={decides ? 6 : 5} message="Nothing answered yet." />
+              <TableEmpty
+                colSpan={decides ? 7 : 6}
+                message="Nothing has been given out and returned yet."
+              />
             ) : (
               history.map((r) => (
                 <TableRow key={r.id}>
@@ -273,6 +281,13 @@ export default async function RequestsPage() {
                   </TableCell>
                   <TableCell>
                     {r.piece ? `#${r.piece.pieceIndex}` : <span className="text-neutral-dark/35">—</span>}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {r.actualUsageG != null ? (
+                      `${r.actualUsageG.toString()} g`
+                    ) : (
+                      <span className="text-neutral-dark/35">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <span className="flex flex-col items-start gap-1">

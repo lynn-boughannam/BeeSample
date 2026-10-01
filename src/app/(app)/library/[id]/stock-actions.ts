@@ -152,7 +152,12 @@ export async function logPieceUsage(
 
   const piece = await prisma.samplePiece.findUnique({
     where: { id: pieceId },
-    include: { checkedOutToUser: { select: { name: true } } },
+    include: {
+      checkedOutToUser: { select: { name: true } },
+      // The request this piece went out against, if it went out against one — an Admin can
+      // also hand a piece over directly, and then there is nothing to close.
+      requests: { where: { status: "GIVEN" }, select: { id: true }, take: 1 },
+    },
   });
   if (!piece) return { formError: "That piece no longer exists." };
   if (piece.status !== "CHECKED_OUT") {
@@ -192,6 +197,21 @@ export async function logPieceUsage(
         },
       });
 
+      // The request the piece went out against is closed by the same act that puts it back
+      // on the shelf. Left open it would read "Given" forever, and nobody could tell a piece
+      // still on a bench from one returned weeks ago.
+      if (piece.requests[0]) {
+        await tx.sampleRequest.update({
+          where: { id: piece.requests[0].id },
+          data: {
+            status: "RETURNED",
+            actualUsageG: centsToGrams(usedCents),
+            decidedAt: returnedAt,
+            decidedById: session.user.id,
+          },
+        });
+      }
+
       // Logged even when nothing was used: "returned untouched" is a real event and the
       // 0 g entry is what records it (SLT-29 AC).
       await tx.transaction.create({
@@ -218,6 +238,7 @@ export async function logPieceUsage(
 
   revalidatePath(`/library/${piece.sampleId}`);
   revalidatePath("/library");
+  revalidatePath("/requests");
   return {
     ok: `Logged ${centsToGrams(usedCents)} g used on piece #${piece.pieceIndex}.`,
   };

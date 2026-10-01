@@ -8,17 +8,29 @@
 // new state, so computed stock, the overdue-checkout warnings and the Checked Out page keep
 // working unchanged. What this adds is the asking.
 
-export const PIECE_REQUEST_STATUSES = ["PENDING", "GIVEN", "REJECTED", "CANCELLED"] as const;
+// The whole loop: asked for, handed over, used, brought back and put on the shelf.
+//
+// RETURNED is what closes it. Without it a request read "Given" forever, so you could not
+// tell a piece still on someone's bench from one that came back three weeks ago — the piece
+// knew it was back, but the record of who had it did not.
+export const PIECE_REQUEST_STATUSES = [
+  "PENDING",
+  "GIVEN",
+  "RETURNED",
+  "REJECTED",
+  "CANCELLED",
+] as const;
 export type PieceRequestStatus = (typeof PIECE_REQUEST_STATUSES)[number];
 
 export const PIECE_REQUEST_STATUS_LABELS: Record<PieceRequestStatus, string> = {
   PENDING: "Pending",
   GIVEN: "Given",
+  RETURNED: "Returned",
   REJECTED: "Rejected",
   CANCELLED: "Cancelled",
 };
 
-/** Only a pending request is waiting on anyone. The other three are over. */
+/** Only a pending request is waiting on anyone. Everything else has been answered. */
 export function isPieceRequestOpen(status: string): boolean {
   return status === "PENDING";
 }
@@ -122,7 +134,10 @@ export const PIECE_REQUEST_STATUS_VARIANT: Record<
   "info" | "success" | "danger" | "neutral"
 > = {
   PENDING: "info",
-  GIVEN: "success",
+  // Out with someone: fine, but not finished.
+  GIVEN: "info",
+  // Back on the shelf — the only state that means the loop completed.
+  RETURNED: "success",
   REJECTED: "danger",
   CANCELLED: "neutral",
 };
