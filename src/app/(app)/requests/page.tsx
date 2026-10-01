@@ -245,9 +245,9 @@ export default async function RequestsPage() {
       </section>
 
       <section>
-        {/* The closed end of the loop: handed over, used, brought back and shelved — plus
-            the ones that never left, because they were refused or withdrawn. */}
-        <h2 className="text-section-header mb-2 text-neutral-dark">Given &amp; returned</h2>
+        {/* Everything answered: the completed loops, and the ones that never left because
+            they were refused or withdrawn. Which is which is the Outcome column's job. */}
+        <h2 className="text-section-header mb-2 text-neutral-dark">Answered</h2>
         <Table>
           <TableHead>
             <TableRow>
@@ -264,7 +264,7 @@ export default async function RequestsPage() {
             {history.length === 0 ? (
               <TableEmpty
                 colSpan={decides ? 7 : 6}
-                message="Nothing has been given out and returned yet."
+                message="Nothing answered yet."
               />
             ) : (
               history.map((r) => (

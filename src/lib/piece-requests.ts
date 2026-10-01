@@ -25,7 +25,9 @@ export type PieceRequestStatus = (typeof PIECE_REQUEST_STATUSES)[number];
 export const PIECE_REQUEST_STATUS_LABELS: Record<PieceRequestStatus, string> = {
   PENDING: "Pending",
   GIVEN: "Given",
-  RETURNED: "Returned",
+  // The outcome is both halves: it went out and it came back. "Returned" on its own loses
+  // the handover, which is the part somebody signed for.
+  RETURNED: "Given & returned",
   REJECTED: "Rejected",
   CANCELLED: "Cancelled",
 };
