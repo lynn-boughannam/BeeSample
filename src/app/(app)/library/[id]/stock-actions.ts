@@ -27,7 +27,7 @@ function fieldErrorsFrom(error: { issues: { path: PropertyKey[]; message: string
 // Turns the form's yyyy-mm-dd into the timestamp to store, or null if the date is in the
 // future — which would make the piece look checked out before it happened and read as
 // negative days on every overdue warning.
-function resolveCheckoutDate(input: string | null): Date | null {
+function resolveEventDate(input: string | null): Date | null {
   const now = new Date();
   if (!input) return now;
 
@@ -61,7 +61,7 @@ export async function checkoutPiece(
   // A date-only input can't say "now", so today keeps the real timestamp — that's what
   // orders same-day checkouts correctly in "Who has what". Any earlier date is stored at
   // local midnight: the piece has been out "since that day".
-  const checkedOutAt = resolveCheckoutDate(parsed.data.checkedOutAt);
+  const checkedOutAt = resolveEventDate(parsed.data.checkedOutAt);
   if (!checkedOutAt) {
     return { fieldErrors: { checkedOutAt: "A checkout can't be dated in the future." } };
   }
@@ -139,10 +139,16 @@ export async function logPieceUsage(
   const parsed = LogPieceUsageSchema.safeParse({
     pieceId: formData.get("pieceId"),
     amountUsedG: formData.get("amountUsedG"),
+    returnedAt: formData.get("returnedAt"),
   });
   if (!parsed.success) return { fieldErrors: fieldErrorsFrom(parsed.error) };
 
   const { pieceId, amountUsedG } = parsed.data;
+
+  const returnedAt = resolveEventDate(parsed.data.returnedAt);
+  if (!returnedAt) {
+    return { fieldErrors: { returnedAt: "A return can't be dated in the future." } };
+  }
 
   const piece = await prisma.samplePiece.findUnique({
     where: { id: pieceId },
@@ -198,6 +204,9 @@ export async function logPieceUsage(
           // formulator it was actually with.
           subjectUserId: piece.checkedOutToUserId,
           pieceId: piece.id,
+          // Dated when the piece actually came back, not when this was typed — the sample's
+          // history is ordered by this, so a back-dated return sorts where it belongs.
+          createdAt: returnedAt,
           note: `Piece #${piece.pieceIndex} returned by ${heldBy} — ${centsToGrams(usedCents)} g used, ${centsToGrams(leftCents)} g left`,
         },
       });

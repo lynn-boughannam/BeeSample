@@ -77,7 +77,9 @@ async function overdueCheckouts(userId: string, role: Role, now: Date) {
         title: `${p.sample.sampleCode} · ${p.sample.rmName}`,
         detail: `Piece #${p.pieceIndex}${holder}`,
         overdueBy: `${plural(days, "day")} out`,
-        href: role === "ADMIN" ? "/checked-out" : "/my-checkouts",
+        // One page for both now — it shows an Admin every piece out and a Formulator
+        // the ones they hold.
+        href: "/requests",
         daysLate: days - CHECKOUT_OVERDUE_DAYS,
       };
     });

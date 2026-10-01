@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import { PrismaMssql } from "@prisma/adapter-mssql";
 import { parseMssqlUrl } from "./src/lib/mssql-url";
+import { formatDay } from "./src/lib/dates";
 import {
   canDecidePieceRequest,
   canRequestPiece,
@@ -336,6 +337,54 @@ async function main() {
     check("the longest wait leads", queue[0]?.requestedBy.name, "Req Lea");
     check("and it carries the piece", queue[0]?.piece?.pieceIndex, 3);
 
+    // The return half, on the same page and by the same Admin who handed it over. Mirrors
+    // logPieceUsage: the piece comes back lighter (or untouched), custody clears, and the
+    // movement is dated when it actually happened rather than when it was typed.
+    console.log("\n--- logging the return, with its own date ---");
+    const outReq = await request(p1.id, mo.id, "FORMULATOR").catch(() => null);
+    // p1 is already with Mo from AC B2, so bring that one back.
+    const held = await prisma.samplePiece.findUniqueOrThrow({ where: { id: p1.id } });
+    check("p1 is out with Mo", held.status, "CHECKED_OUT");
+    const returnedOn = new Date(2026, 8, 25); // 25 Sep 2026, local midnight
+    await prisma.$transaction(async (tx) => {
+      await tx.samplePiece.update({
+        where: { id: p1.id },
+        data: {
+          remainingWeightG: "18.00",
+          status: "IN_STOCK",
+          checkedOutToUserId: null,
+          checkedOutAt: null,
+        },
+      });
+      await tx.transaction.create({
+        data: {
+          sampleId: sample.id,
+          pieceId: p1.id,
+          type: "RETURN_USAGE",
+          quantityG: "12.00",
+          performedById: admin.id,
+          subjectUserId: mo.id,
+          createdAt: returnedOn,
+          note: "returned",
+        },
+      });
+    });
+    const back = await prisma.samplePiece.findUniqueOrThrow({ where: { id: p1.id } });
+    check("back on the shelf", back.status, "IN_STOCK");
+    check("lighter by what was used", back.remainingWeightG.toString(), "18");
+    check("custody cleared", back.checkedOutToUserId, "null");
+    const movement = await prisma.transaction.findFirstOrThrow({
+      where: { pieceId: p1.id, type: "RETURN_USAGE" },
+    });
+    // formatDay, not toISOString().slice(0, 10) — at UTC+3 a date stored at local midnight
+    // reads back as the previous day in UTC, which is the whole reason lib/dates exists.
+    check("the movement is dated when it came back",
+      formatDay(movement.createdAt), "2026-09-25");
+    check("and names who had it", movement.subjectUserId, mo.id);
+    check("a returned piece can be asked for again",
+      pieceIsRequestable({ status: back.status }), true);
+    if (outReq) await prisma.sampleRequest.delete({ where: { id: outReq.id } });
+
     console.log("\n=== wiring ===");
     const actions = readFileSync("src/app/(app)/requests/actions.ts", "utf8");
     check("giving re-checks the role on the server",
@@ -358,6 +407,28 @@ async function main() {
     const panel = readFileSync("src/app/(app)/library/[id]/stock-panel.tsx", "utf8");
     check("the piece list says why one can't be asked for",
       /pieceUnavailableReason\(piece\)/.test(panel), true);
+
+    // One page for asking and for holding: handing a piece over and taking it back used to
+    // live on different screens.
+    check("the page lists pieces that are out",
+      /status: "CHECKED_OUT"/.test(page), true);
+    check("an Admin sees every one, a Formulator only theirs",
+      /checkedOutToUserId: session\.user\.id/.test(page), true);
+    check("and the return is logged from there",
+      /<LogUsageForm/.test(page), true);
+
+    const nav = readFileSync("src/lib/nav.ts", "utf8");
+    check("one nav entry, not three",
+      (nav.match(/key: "(checked-out|my-checkouts|requests)"/g) ?? []).length, 1);
+    check("named for both halves", /label: "Requests & Checkouts"/.test(nav), true);
+
+    const usage = readFileSync("src/app/(app)/library/[id]/stock-actions.ts", "utf8");
+    // A return gets recorded after the fact as often as a checkout does.
+    check("the return takes a date", /returnedAt: formData\.get\("returnedAt"\)/.test(usage), true);
+    check("a future one is refused", /A return can't be dated in the future/.test(usage), true);
+    check("and it dates the movement", /createdAt: returnedAt,/.test(usage), true);
+    check("one resolver for both dates",
+      (usage.match(/resolveEventDate\(/g) ?? []).length, 3);
   } finally {
     await wipe();
     console.log("\ncleanup done");

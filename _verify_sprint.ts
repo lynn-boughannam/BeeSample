@@ -96,7 +96,8 @@ function main() {
   const screens = {
     "Admin dashboard (SLT-38)": "src/app/(app)/dashboard/admin-dashboard.tsx",
     "Formulator dashboard (SLT-40)": "src/app/(app)/dashboard/page.tsx",
-    "My Checkouts (SLT-30)": "src/app/(app)/my-checkouts/page.tsx",
+    // Checked Out and My Checkouts merged into this one page.
+    "Requests & Checkouts": "src/app/(app)/requests/page.tsx",
   };
   for (const [name, file] of Object.entries(screens)) {
     const src = readFileSync(file, "utf8");
@@ -118,8 +119,7 @@ function main() {
   const rowSurfaces = {
     "Admin dashboard": "src/app/(app)/dashboard/admin-dashboard.tsx",
     "Formulator dashboard": "src/app/(app)/dashboard/page.tsx",
-    "My Checkouts": "src/app/(app)/my-checkouts/page.tsx",
-    "Checked Out page": "src/app/(app)/checked-out/page.tsx",
+    "Requests & Checkouts": "src/app/(app)/requests/page.tsx",
   };
   for (const [name, file] of Object.entries(rowSurfaces)) {
     check(`${name} tints the row`, /checkoutRowClass\(/.test(readFileSync(file, "utf8")), true);
@@ -130,13 +130,17 @@ function main() {
 
   console.log("\n=== Checked Out KPI leads to the list of who has what ===");
   const adminDash = readFileSync("src/app/(app)/dashboard/admin-dashboard.tsx", "utf8");
-  check("KPI points at /checked-out", /kpis\.checkedOut, href: "\/checked-out"/.test(adminDash), true);
+  // The list of who has what now lives on Requests & Checkouts, alongside the requests that
+  // put the pieces there.
+  check("KPI points at the list", /kpis\.checkedOut, href: "\/requests"/.test(adminDash), true);
   check("no longer points at /locations", /kpis\.checkedOut, href: "\/locations"/.test(adminDash), false);
   const navSrc = readFileSync("src/lib/nav.ts", "utf8");
-  check("nav entry exists for admins", /key: "checked-out".*roles: \["ADMIN"\]/.test(navSrc), true);
-  const page = readFileSync("src/app/(app)/checked-out/page.tsx", "utf8");
-  check("page is admin-only", /requireAdmin\(\)/.test(page), true);
-  check("page groups by holder", /checkedOutToUser/.test(page), true);
+  check("one nav entry covers it",
+    /key: "requests".*roles: \["ADMIN", "FORMULATOR"\]/.test(navSrc), true);
+  const page = readFileSync("src/app/(app)/requests/page.tsx", "utf8");
+  check("it lists who holds what", /checkedOutToUser/.test(page), true);
+  check("and narrows to the viewer when they don't decide",
+    /checkedOutToUserId: session\.user\.id/.test(page), true);
   check("page has an empty state", /Every piece is on the shelf/.test(page), true);
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

@@ -16,11 +16,6 @@ import { addReceivedStock, checkoutPiece, discardPieces, logPieceUsage } from ".
 import { stockFromPieces, getCheckoutWarningLevel, type PieceStatus } from "@/lib/stock";
 
 
-// The server's calendar day. toISOString() would give the UTC day, which can be a day off
-// from the clock the checkout action compares against.
-const localDay = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
 // Transaction.type is a plain string column (SQL Server has no enum) — see
 // TRANSACTION_TYPES in src/lib/types.ts for the full set.
 const TRANSACTION_LABELS: Record<string, string> = {
@@ -262,7 +257,7 @@ export default async function SampleDetailPage({
           formulators={formulators}
           isAdmin={isAdmin}
           isDiscarded={sample.isDiscarded}
-          today={localDay(new Date())}
+          today={day(new Date())}
           sampleId={sample.id}
           canRequest={canRequestPiece(role)}
           requestAction={requestPiece}

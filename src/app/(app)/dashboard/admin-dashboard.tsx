@@ -44,7 +44,7 @@ export async function AdminDashboard({ viewerId }: { viewerId: string }) {
     { label: "Zero Stock", value: kpis.zeroStock, href: "/library?stock=ZERO", tone: "danger" },
     { label: "Discarded Samples", value: kpis.discardedSamples, href: "/library?discarded=1" },
     { label: "Sample Requests", value: kpis.pendingRequests, href: "/requests" },
-    { label: "Checked Out", value: kpis.checkedOut, href: "/checked-out" },
+    { label: "Checked Out", value: kpis.checkedOut, href: "/requests" },
     { label: "New Orders", value: kpis.newOrders, href: "/orders" },
     // Approved, costed, and waiting on somebody to raise the PR. Filtered rather than just
     // counted, so the tile lands on the requests it is counting.

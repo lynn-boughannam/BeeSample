@@ -6,7 +6,8 @@ import { parseMssqlUrl } from "./src/lib/mssql-url";
 import { shelfAddress } from "./src/lib/categories";
 
 // SLT-57 acceptance criteria. Runs the page's own queries, plus a static check that the
-// page really is action-free (AC4 is about what ISN'T there, which no query can prove).
+// the Formulator's half really is action-free (AC4 is about what ISN'T offered to them,
+// which no query can prove).
 
 const prisma = new PrismaClient({
   adapter: new PrismaMssql(parseMssqlUrl(process.env.DATABASE_URL!)),
@@ -144,14 +145,17 @@ async function main() {
     check("their history excludes mine", theirs.some((h) => h.piece?.pieceIndex === 2), false);
     check("my current excludes their pieces", (await loadCurrent(other.id)).length, 0);
 
-    console.log("\n=== AC4: the page is entirely read-only ===");
-    const src = readFileSync("src/app/(app)/my-checkouts/page.tsx", "utf8");
-    check("no <form>", /<form[\s>]/.test(src), false);
-    check("no <button>", /<button[\s>]/.test(src), false);
-    check("no Button component", /<Button[\s>]/.test(src), false);
-    check("no server action import", /stock-actions|useActionState|"use server"/.test(src), false);
-    check("no input controls", /<Input[\s>]|<Select[\s>]|<input[\s>]/.test(src), false);
-    check("not a client component", /"use client"/.test(src), false);
+    // AC4 — a Formulator sees their custody and cannot act on it. The page showing it is now
+    // shared with the Admin, so "this file contains no form" no longer expresses that. What
+    // protects it is the gate on the form and the guard in the action.
+    console.log("\n=== AC4: a Formulator cannot act on a piece they hold ===");
+    const src = readFileSync("src/app/(app)/requests/page.tsx", "utf8");
+    const flat = src.replace(/\s+/g, " ");
+    check("the return form is Admin-only", /decides && \( <LogUsageForm/.test(flat), true);
+    const usage = readFileSync("src/app/(app)/library/[id]/stock-actions.ts", "utf8");
+    // The server is what actually refuses them, whatever the page chose to render.
+    check("and the action refuses anyone else",
+      /export async function logPieceUsage\([\s\S]{0,200}requireAdmin\(\)/.test(usage), true);
 
     console.log("\n=== backfilled real history is visible ===");
     const makki = await prisma.user.findFirst({ where: { name: "Mohammad.Makki" } });

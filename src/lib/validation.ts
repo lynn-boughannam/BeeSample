@@ -242,6 +242,13 @@ export const LogPieceUsageSchema = z.object({
   amountUsedG: z.coerce
     .number({ error: "Enter the amount used in grams" })
     .nonnegative("Amount used can't be negative"),
+  // A return gets recorded after the fact as often as a checkout does, so it takes a date
+  // for the same reason — and the piece's history should say when it actually came back,
+  // not when someone got round to typing it. "" means today.
+  returnedAt: z
+    .union([z.literal(""), z.iso.date("Enter a valid return date")])
+    .transform((v) => (v === "" ? null : v))
+    .nullable(),
 });
 
 // SLT-25. A restock is a genuine new batch, not a correction, so the amount must be a

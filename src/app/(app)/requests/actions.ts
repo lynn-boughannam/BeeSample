@@ -201,8 +201,6 @@ export async function givePiece(
 
   revalidatePath(`/library/${request.sampleId}`);
   revalidatePath("/requests");
-  revalidatePath("/checked-out");
-  revalidatePath("/my-checkouts");
   revalidatePath("/library");
   revalidatePath("/dashboard");
   return {
