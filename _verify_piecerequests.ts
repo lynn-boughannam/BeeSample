@@ -411,6 +411,40 @@ async function main() {
     check("and it is no longer open", isPieceRequestOpen(closed.status), false);
     if (outReq) await prisma.sampleRequest.delete({ where: { id: outReq.id } });
 
+    // A request in flight belongs in one place. It was appearing in the answered list too,
+    // where "Given" read as the outcome of a finished loop rather than a piece still out.
+    console.log("\n--- a piece still out is not 'answered' ---");
+    // Lea's request on p3 from the queue above is still pending — hand that one over rather
+    // than raising a second for a piece that already has one.
+    const outstanding = older;
+    await give(outstanding.id, admin.id, "ADMIN");
+    const answeredQuery = { status: { in: ["RETURNED", "REJECTED", "CANCELLED"] } } as const;
+    const inAnswered = await prisma.sampleRequest.count({
+      where: { id: outstanding.id, ...answeredQuery },
+    });
+    check("a given request is not in the answered list", inAnswered, 0);
+    const stillOut = await prisma.samplePiece.count({
+      where: { id: p3.id, status: "CHECKED_OUT" },
+    });
+    check("it is in the out list instead", stillOut, 1);
+    // And once it comes back it moves across, rather than appearing in both.
+    await prisma.$transaction(async (tx) => {
+      await tx.samplePiece.update({
+        where: { id: p3.id },
+        data: { status: "IN_STOCK", checkedOutToUserId: null, checkedOutAt: null },
+      });
+      await tx.sampleRequest.update({
+        where: { id: outstanding.id },
+        data: { status: "RETURNED", actualUsageG: "0.00", decidedAt: new Date(), decidedById: admin.id },
+      });
+    });
+    check("once back, it is answered", await prisma.sampleRequest.count({
+      where: { id: outstanding.id, ...answeredQuery },
+    }), 1);
+    check("and no longer out", await prisma.samplePiece.count({
+      where: { id: p3.id, status: "CHECKED_OUT" },
+    }), 0);
+
     console.log("\n=== wiring ===");
     const actions = readFileSync("src/app/(app)/requests/actions.ts", "utf8");
     check("giving re-checks the role on the server",
@@ -438,6 +472,10 @@ async function main() {
     // live on different screens.
     check("the page lists pieces that are out",
       /status: "CHECKED_OUT"/.test(page), true);
+    // Finished, not merely "not pending" — that is what put a live request in Answered.
+    check("answered means finished, not just decided",
+      /status: \{ in: \["RETURNED", "REJECTED", "CANCELLED"\] \}/.test(page), true);
+    check("not status: not PENDING", /status: \{ not: "PENDING" \}/.test(page), false);
     check("an Admin sees every one, a Formulator only theirs",
       /checkedOutToUserId: session\.user\.id/.test(page), true);
     check("and the return is logged from there",

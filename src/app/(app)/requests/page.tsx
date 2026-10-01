@@ -84,7 +84,10 @@ export default async function RequestsPage() {
     }),
     prisma.sampleRequest.findMany({
       where: {
-        status: { not: "PENDING" },
+        // Finished, not merely "not pending". A GIVEN request is still in flight — the piece
+        // is on someone's bench — and it is already listed above as out with them. Including
+        // it here showed the same request twice and called the live half "answered".
+        status: { in: ["RETURNED", "REJECTED", "CANCELLED"] },
         ...(decides ? {} : { requestedById: session.user.id }),
       },
       select: selectRequest,
